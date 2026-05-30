@@ -1,6 +1,6 @@
 === Enterprise Forms ===
 Contributors: terrencelp
-Tags: forms, form builder, payments, stripe, braintree, block editor, rest api, interactivity api
+Tags: forms, form builder, payments, stripe, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
 Stable tag: 1.0.0
@@ -22,8 +22,8 @@ Use it to create forms, publish them with a block, collect submissions through c
 * Frontend rendering through the Enterprise Form block.
 * Encrypted submission payload storage.
 * File upload handling using native WordPress media tools.
-* Payment Checkout block with gateway-aware server verification.
-* Payment settings for Stripe, Braintree, Authorize.Net, Adyen, and Square credentials.
+* Payment Checkout block with Stripe server verification.
+* Stripe payment settings with non-Stripe providers hidden for V1.
 * Per-form notification controls with fallback to the site admin email.
 * Built-in frontend themes for different presentation styles.
 * Entry viewing screen for submitted data.
@@ -50,13 +50,13 @@ Use it to create forms, publish them with a block, collect submissions through c
 
 = Payments =
 
-Enterprise Forms includes a gateway-agnostic payment architecture. Stripe is wired through PaymentIntents and Stripe Elements. Braintree is scaffolded through Braintree Drop-in, client token generation, and server-side transaction capture. Authorize.Net, Adyen, and Square credential storage is available in the payment settings screen, with checkout adapters intentionally hidden from the builder until their processing layers are implemented.
+Enterprise Forms V1 supports Stripe checkout through PaymentIntents and Stripe Elements. Braintree, Authorize.Net, Adyen, and Square are intentionally hidden from the settings screen, builder, and schema until their full processing layers are ready.
 
 Payment amounts are calculated server-side from the saved form schema. Payment-required submissions are verified with the selected gateway before entries are stored.
 
 = Developer dependencies =
 
-Run `composer install` before using payment gateways so the Stripe and Braintree PHP SDKs are available through `vendor/autoload.php`.
+Run `composer install` during development so the Stripe PHP SDK is available through `vendor/autoload.php`. Release zip archives include optimized Composer dependencies.
 
 == Installation ==
 
@@ -88,7 +88,7 @@ Yes. Uploaded files are stored through the normal WordPress media workflow and l
 
 = Does the plugin support payments? =
 
-Yes. Use the Payment Checkout block after configuring gateway credentials under the Payments settings screen. Stripe checkout is fully wired, and Braintree support includes the Drop-in and server-side transaction path when the Braintree PHP SDK is installed.
+Yes. Use the Payment Checkout block after configuring Stripe under the Payments settings screen. Stripe checkout is the supported V1 payment path.
 
 = Are payment amounts trusted from the browser? =
 
@@ -107,10 +107,10 @@ Entry viewing is restricted to privileged users in wp-admin.
 * Added block-based form builder and frontend renderer block.
 * Added encrypted entry storage and REST submission handling.
 * Added file upload support.
-* Added gateway-agnostic payment architecture.
+* Added payment adapter boundary for future gateway expansion.
 * Added Stripe PaymentIntent checkout and verification.
-* Added Braintree gateway scaffold with Drop-in support.
-* Added payment gateway settings for Stripe, Braintree, Authorize.Net, Adyen, and Square.
+* Added Stripe payment settings.
+* Hid non-Stripe payment providers for V1.
 * Added notification settings and transport status visibility.
 * Added built-in frontend themes.
 

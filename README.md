@@ -12,8 +12,8 @@ It is designed for teams that want native WordPress primitives on the backend, a
 - Submission handling over custom REST endpoints.
 - Encrypted entry payload storage.
 - File upload support using native WordPress media handling.
-- Native payment checkout block with gateway-aware processing.
-- Payment gateway settings for Stripe, Braintree, Authorize.Net, Adyen, and Square.
+- Native Stripe checkout block with server-side payment verification.
+- Stripe payment settings with non-Stripe providers hidden for V1.
 - Per-form notification settings with admin-email fallback.
 - Themeable frontend output with included `chameleon` and `itsm` themes.
 - Custom `ep_form` post type with REST support.
@@ -47,10 +47,9 @@ The builder currently includes these field blocks:
 - Node.js for asset builds
 - Composer for PHP autoloading in development
 
-Payment runtime dependencies are installed through Composer. The current checkout adapters use:
+Payment runtime dependencies are installed through Composer. The V1 checkout path uses:
 
 - `stripe/stripe-php` for Stripe PaymentIntents.
-- `braintree/braintree_php` for Braintree client tokens and transaction capture.
 
 ## Installation
 
@@ -70,7 +69,7 @@ npm install
 npm run build
 ```
 
-`composer install` creates `vendor/autoload.php`, which is required for the Stripe and Braintree SDK classes.
+`composer install` creates `vendor/autoload.php`, which is required for the Stripe SDK classes in development. Release zips include optimized Composer dependencies.
 
 For active development:
 
@@ -92,8 +91,8 @@ npm run format
 1. Create a new form from the dashboard.
 2. Build the schema in the workstation using the included field blocks.
 3. Configure form theme and notification settings.
-4. Configure payment gateways under **Settings > Payments** when the form needs checkout.
-5. Add the Payment Checkout block and choose a configured gateway.
+4. Configure Stripe under **Settings > Payments** when the form needs checkout.
+5. Add the Payment Checkout block.
 6. Save the form schema to `ep_form_schema` post meta.
 7. Embed the form with the `enterprise-forms/renderer` block.
 8. Accept submissions through the REST API.
@@ -107,13 +106,13 @@ When using S3-compatible storage, configure the target bucket CORS policy to all
 
 ## Payments
 
-Enterprise Forms includes a gateway-agnostic payment layer so the form schema, frontend renderer, and submission pipeline do not hardcode a single provider.
+Enterprise Forms includes a narrow V1 Stripe checkout path backed by a payment adapter boundary so later providers can be added without rewriting submissions.
 
 Current checkout behavior:
 
 - Stripe is fully wired through PaymentIntents, Stripe Elements, server-side amount validation, and payment verification before entry storage.
-- Braintree is scaffolded with Drop-in SDK loading, client token generation, and server-side transaction capture through the Braintree PHP SDK.
-- Authorize.Net, Adyen, and Square credential storage is present for the settings dashboard, but those gateways are intentionally hidden from the builder dropdown until full checkout adapters are implemented.
+- Braintree, Authorize.Net, Adyen, and Square are intentionally hidden from the admin UI and schema for V1.
+- Dormant adapter/dependency code may remain in the repository, but it is not part of the supported V1 checkout surface.
 
 Payment security rules:
 
@@ -136,7 +135,7 @@ Payment security rules:
 - `inc/interface-ep-payment-gateway.php`: defines the payment gateway adapter contract.
 - `inc/class-ep-payment-factory.php`: resolves the configured gateway from schema and creates adapters.
 - `inc/class-ep-gateway-stripe.php`: Stripe PaymentIntent adapter.
-- `inc/class-ep-gateway-braintree.php`: Braintree Drop-in and transaction adapter.
+- `inc/class-ep-gateway-braintree.php`: dormant Braintree adapter kept out of the V1 admin/schema surface.
 - `inc/Database.php`: manages the custom entries table and aggregate queries.
 - `inc/NotificationService.php`: resolves recipients and dispatches email notifications.
 - `inc/class-ep-theme-engine.php`: registers and injects frontend theme tokens.
@@ -167,8 +166,8 @@ Key routes include:
 - `GET /stats` for dashboard metrics
 - `GET /forms/entry-counts` for per-form counts
 - `GET /notifications/statuses` for notification configuration state
-- `GET /payments/settings` for authenticated payment gateway settings
-- `POST /payments/settings` for authenticated payment gateway settings updates
+- `GET /payments/settings` for authenticated Stripe settings
+- `POST /payments/settings` for authenticated Stripe settings updates
 - `POST /payment-intent` for public payment intent or client-token preparation
 
 ## Notes
@@ -176,8 +175,12 @@ Key routes include:
 - The frontend renderer is a dynamic block, so displayed form output is generated from the saved schema.
 - Notifications can use explicitly configured recipients or fall back to the site admin email.
 - File uploads are stored as WordPress attachments.
-- Payment gateway credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
+- Stripe credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
 - Admin entry access is restricted to privileged users.
+
+## Release Packaging
+
+Production archives are built by [`.github/workflows/release.yml`](.github/workflows/release.yml) when a GitHub release is published or the workflow is run manually against an existing tag. The archive is rooted at `enterprise-forms/` and includes compiled `build/` assets plus optimized Composer `vendor/` dependencies, while excluding development files such as `.github/`, `.agents/`, `.docs/`, `node_modules/`, package manifests, Composer manifests, and local tooling config.
 
 ## License
 
