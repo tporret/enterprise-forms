@@ -43,3 +43,4 @@ Thumbs.db
 # WordPress/local tooling noise
 wp-content/debug.log
 debug.log
+enterprise-forms.html

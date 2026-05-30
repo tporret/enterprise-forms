@@ -125,7 +125,7 @@ Payment security rules:
 
 ### Backend
 
-- `plugin.php`: plugin bootstrap and component initialization.
+- `enterprise-forms.php`: plugin bootstrap and component initialization.
 - `inc/PostTypes.php`: registers the `ep_form` post type and schema meta.
 - `inc/AdminBridge.php`: mounts the full-screen React workstation in wp-admin.
 - `inc/RestApi.php`: registers admin stats and notification status endpoints.
