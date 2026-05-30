@@ -9,7 +9,7 @@ use Exception;
 class EP_Crypto {
 	private const CIPHER = 'aes-256-gcm';
 	private const KEY_CONSTANT = 'EP_ENCRYPTION_KEY';
-	private const PENDING_KEY_OPTION = 'ep_forms_pending_encryption_key';
+	private const KEY_ID_CONSTANT = 'EP_ENCRYPTION_KEY_ID';
 	private const KEY_NOTICE_OPTION = 'ep_forms_encryption_key_notice';
 
 	public function init(): void {
@@ -21,18 +21,15 @@ class EP_Crypto {
 	 */
 	public static function ensure_encryption_key(): void {
 		if ( self::has_encryption_key() ) {
-			return;
-		}
-
-		$key = self::generate_key();
-		if ( self::persist_key_to_wp_config( $key ) ) {
-			delete_option( self::PENDING_KEY_OPTION );
 			delete_option( self::KEY_NOTICE_OPTION );
 			return;
 		}
 
-		update_option( self::PENDING_KEY_OPTION, $key, false );
 		update_option( self::KEY_NOTICE_OPTION, 1, false );
+	}
+
+	public static function is_configured(): bool {
+		return self::has_encryption_key();
 	}
 
 	/**
@@ -45,7 +42,8 @@ class EP_Crypto {
 			return $data;
 		}
 
-		$key = $this->resolve_binary_key();
+		$key_id = $this->current_key_id();
+		$key = $this->resolve_binary_key( $key_id );
 		$iv_length = openssl_cipher_iv_length( self::CIPHER );
 		$iv = random_bytes( $iv_length );
 
@@ -55,7 +53,7 @@ class EP_Crypto {
 			throw new Exception( __( 'Failed to encrypt payload.', 'enterprise-forms' ) );
 		}
 
-		return 'ENCv1:' . base64_encode( $iv . $tag . $ciphertext );
+		return 'ENCv2:' . $key_id . ':' . base64_encode( $iv . $tag . $ciphertext );
 	}
 
 	/**
@@ -66,11 +64,22 @@ class EP_Crypto {
 			return $data;
 		}
 
-		if ( 0 !== strpos( $data, 'ENCv1:' ) ) {
+		if ( 0 !== strpos( $data, 'ENCv1:' ) && 0 !== strpos( $data, 'ENCv2:' ) ) {
 			return $data;
 		}
 
+		$key_id = 'legacy';
 		$encoded = substr( $data, 6 );
+		if ( str_starts_with( $data, 'ENCv2:' ) ) {
+			$parts = explode( ':', $data, 3 );
+			if ( 3 !== count( $parts ) ) {
+				return $data;
+			}
+
+			$key_id = sanitize_key( $parts[1] );
+			$encoded = $parts[2];
+		}
+
 		$raw = base64_decode( $encoded, true );
 		if ( false === $raw ) {
 			return $data;
@@ -87,7 +96,7 @@ class EP_Crypto {
 		$ciphertext = substr( $raw, $iv_length + $tag_length );
 
 		try {
-			$key = $this->resolve_binary_key();
+			$key = $this->resolve_binary_key( $key_id );
 		} catch ( Exception ) {
 			return $data;
 		}
@@ -107,15 +116,10 @@ class EP_Crypto {
 			return;
 		}
 
-		$pending_key = (string) get_option( self::PENDING_KEY_OPTION, '' );
-		if ( '' === $pending_key ) {
-			return;
-		}
-
 		$message = sprintf(
 			/* translators: %s: encryption key define */
-			__( 'Enterprise Forms encryption key is not yet in wp-config.php. Add %s to wp-config.php to enable payload encryption.', 'enterprise-forms' ),
-			'<code>define(\'' . self::KEY_CONSTANT . '\', \'' . esc_html( $pending_key ) . '\');</code>'
+			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %s to wp-config.php or provide it through the environment.', 'enterprise-forms' ),
+			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>'
 		);
 
 		echo '<div class="notice notice-warning"><p>' . wp_kses_post( $message ) . '</p></div>';
@@ -126,70 +130,28 @@ class EP_Crypto {
 			return true;
 		}
 
-		$pending_key = (string) get_option( self::PENDING_KEY_OPTION, '' );
+		$env_key = getenv( self::KEY_CONSTANT );
 
-		return '' !== $pending_key;
-	}
-
-	private static function generate_key(): string {
-		return base64_encode( random_bytes( 32 ) );
-	}
-
-	private static function persist_key_to_wp_config( string $key ): bool {
-		$config_path = self::detect_wp_config_path();
-		if ( '' === $config_path || ! is_writable( $config_path ) ) {
-			return false;
-		}
-
-		$config_contents = file_get_contents( $config_path );
-		if ( ! is_string( $config_contents ) ) {
-			return false;
-		}
-
-		if ( false !== strpos( $config_contents, self::KEY_CONSTANT ) ) {
-			return true;
-		}
-
-		$define = "define('" . self::KEY_CONSTANT . "', '" . addslashes( $key ) . "');\n";
-		$anchor = "/* That's all, stop editing! Happy publishing. */";
-
-		if ( false !== strpos( $config_contents, $anchor ) ) {
-			$updated = str_replace( $anchor, $define . "\n" . $anchor, $config_contents );
-		} else {
-			$updated = $config_contents . "\n" . $define;
-		}
-
-		return false !== file_put_contents( $config_path, $updated );
-	}
-
-	private static function detect_wp_config_path(): string {
-		if ( defined( 'ABSPATH' ) ) {
-			$in_root = ABSPATH . 'wp-config.php';
-			if ( file_exists( $in_root ) ) {
-				return $in_root;
-			}
-
-			$one_level_up = dirname( ABSPATH ) . '/wp-config.php';
-			if ( file_exists( $one_level_up ) ) {
-				return $one_level_up;
-			}
-		}
-
-		return '';
+		return is_string( $env_key ) && '' !== $env_key;
 	}
 
 	/**
 	 * @throws Exception
 	 */
-	private function resolve_binary_key(): string {
+	private function resolve_binary_key( string $key_id = '' ): string {
 		$raw_key = '';
+		$keyring = apply_filters( 'ep_forms_encryption_keyring', [] );
+		if ( '' !== $key_id && is_array( $keyring ) && isset( $keyring[ $key_id ] ) && is_string( $keyring[ $key_id ] ) ) {
+			$raw_key = $keyring[ $key_id ];
+		}
 
-		if ( defined( self::KEY_CONSTANT ) && is_string( constant( self::KEY_CONSTANT ) ) ) {
+		if ( '' === $raw_key && defined( self::KEY_CONSTANT ) && is_string( constant( self::KEY_CONSTANT ) ) ) {
 			$raw_key = constant( self::KEY_CONSTANT );
 		}
 
 		if ( '' === $raw_key ) {
-			$raw_key = (string) get_option( self::PENDING_KEY_OPTION, '' );
+			$env_key = getenv( self::KEY_CONSTANT );
+			$raw_key = is_string( $env_key ) ? $env_key : '';
 		}
 
 		if ( '' === $raw_key ) {
@@ -202,5 +164,13 @@ class EP_Crypto {
 		}
 
 		return hash( 'sha256', $raw_key, true );
+	}
+
+	private function current_key_id(): string {
+		if ( defined( self::KEY_ID_CONSTANT ) && is_string( constant( self::KEY_ID_CONSTANT ) ) && '' !== constant( self::KEY_ID_CONSTANT ) ) {
+			return sanitize_key( (string) constant( self::KEY_ID_CONSTANT ) );
+		}
+
+		return 'current';
 	}
 }

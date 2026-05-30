@@ -56,6 +56,7 @@ interface FormState {
 
 interface PaymentIntentResponse {
 	id?: string;
+	payment_record_id?: string;
 	client_secret?: string;
 	client_token?: string;
 	gateway?: string;
@@ -215,6 +216,10 @@ const fetchPaymentIntent = async ( context: FormContext, formElement: HTMLFormEl
 	const result = await response.json() as PaymentIntentResponse;
 	if ( ! response.ok ) {
 		throw new Error( result?.message || 'Unable to prepare payment.' );
+	}
+
+	if ( result?.payment_record_id ) {
+		context.values.payment_record_id = result.payment_record_id;
 	}
 
 	return result;

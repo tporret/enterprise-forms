@@ -40,19 +40,19 @@ class EP_Cloud_Storage {
 	 *     'storage_path' => string,  // Final storage path after upload
 	 * }
 	 */
-	public static function generate_upload_intent( $file_name, $mime_type, $file_size, $form_id ): array|WP_Error {
+	public static function generate_upload_intent( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array|WP_Error {
 		$provider = self::get_provider();
 
 		switch ( $provider ) {
 			case 's3':
-				return self::generate_s3_presigned_url( $file_name, $mime_type, $file_size, $form_id );
+				return self::generate_s3_presigned_url( $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 			case 'r2':
-				return self::generate_r2_presigned_url( $file_name, $mime_type, $file_size, $form_id );
+				return self::generate_r2_presigned_url( $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 			case 'gcs':
-				return self::generate_gcs_presigned_url( $file_name, $mime_type, $file_size, $form_id );
+				return self::generate_gcs_presigned_url( $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 			case 'local':
 			default:
-				return self::generate_local_presigned_url( $file_name, $mime_type, $file_size, $form_id );
+				return self::generate_local_presigned_url( $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 		}
 	}
 
@@ -68,7 +68,7 @@ class EP_Cloud_Storage {
 	 *
 	 * @return array
 	 */
-	protected static function generate_local_presigned_url( $file_name, $mime_type, $file_size, $form_id ): array {
+	protected static function generate_local_presigned_url( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array {
 		// Create a secure upload token valid for 1 hour
 		$token = wp_generate_password( 32, true, true );
 		$expires = time() + 3600;
@@ -79,6 +79,12 @@ class EP_Cloud_Storage {
 			'mime_type' => $mime_type,
 			'file_size' => $file_size,
 			'form_id'   => $form_id,
+			'field_name' => $field_name,
+			'allowed_types' => array_values( array_filter( array_map( 'sanitize_key', $allowed_types ) ) ),
+			'max_size' => $max_size,
+			'checksum' => $checksum,
+			'status' => 'created',
+			'expires_at' => $expires,
 			'uploaded_at' => current_time( 'mysql' ),
 		];
 
@@ -107,8 +113,8 @@ class EP_Cloud_Storage {
 	 *
 	 * @return array
 	 */
-	protected static function generate_s3_presigned_url( $file_name, $mime_type, $file_size, $form_id ): array|WP_Error {
-		return self::generate_s3_compatible_presigned_url( 's3', $file_name, $mime_type, $file_size, $form_id );
+	protected static function generate_s3_presigned_url( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array|WP_Error {
+		return self::generate_s3_compatible_presigned_url( 's3', $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 	}
 
 	/**
@@ -121,8 +127,8 @@ class EP_Cloud_Storage {
 	 *
 	 * @return array
 	 */
-	protected static function generate_r2_presigned_url( $file_name, $mime_type, $file_size, $form_id ): array|WP_Error {
-		return self::generate_s3_compatible_presigned_url( 'r2', $file_name, $mime_type, $file_size, $form_id );
+	protected static function generate_r2_presigned_url( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array|WP_Error {
+		return self::generate_s3_compatible_presigned_url( 'r2', $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 	}
 
 	/**
@@ -135,11 +141,11 @@ class EP_Cloud_Storage {
 	 *
 	 * @return array
 	 */
-	protected static function generate_gcs_presigned_url( $file_name, $mime_type, $file_size, $form_id ): array|WP_Error {
-		return self::generate_s3_compatible_presigned_url( 'gcs', $file_name, $mime_type, $file_size, $form_id );
+	protected static function generate_gcs_presigned_url( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array|WP_Error {
+		return self::generate_s3_compatible_presigned_url( 'gcs', $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 	}
 
-	protected static function generate_s3_compatible_presigned_url( string $provider, string $file_name, string $mime_type, int $file_size, string $form_id ): array|WP_Error {
+	protected static function generate_s3_compatible_presigned_url( string $provider, string $file_name, string $mime_type, int $file_size, string $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array|WP_Error {
 		$settings = self::settings();
 
 		if ( ! $settings->is_provider_configured( $provider ) ) {
@@ -204,11 +210,14 @@ class EP_Cloud_Storage {
 		$signature = hash_hmac( 'sha256', $string_to_sign, self::signing_key( $secret_key, $short_date, $region ) );
 		$url = $scheme . '://' . $host . $canonical_uri . '?' . $canonical_query . '&X-Amz-Signature=' . $signature;
 
+		$storage_path = self::public_storage_url( $provider, $credentials, $scheme, $host, $canonical_uri, $bucket, $key, $path_style );
+		self::store_upload_metadata( $storage_path, sanitize_file_name( $file_name ), $file_size, $form_id, '', $field_name, 'created', '', gmdate( 'Y-m-d H:i:s', time() + $expires ) );
+
 		return [
 			'url'          => $url,
 			'headers'      => [],
 			'expires_in'   => $expires,
-			'storage_path' => self::public_storage_url( $provider, $credentials, $scheme, $host, $canonical_uri, $bucket, $key, $path_style ),
+			'storage_path' => $storage_path,
 			'method'       => 'PUT',
 			'provider'     => $provider,
 		];
@@ -372,7 +381,7 @@ class EP_Cloud_Storage {
 	 *     'size'        => int,
 	 * }
 	 */
-	public static function store_upload_metadata( $file_url, $file_name, $file_size, $form_id, $entry_id = '', $field_name = '' ): array {
+	public static function store_upload_metadata( $file_url, $file_name, $file_size, $form_id, $entry_id = '', $field_name = '', $status = 'uploaded', $upload_token_hash = '', $expires_at = '' ): array {
 		global $wpdb;
 
 		// Create uploads metadata table if it doesn't exist
@@ -391,9 +400,12 @@ class EP_Cloud_Storage {
 				'file_url'    => $file_url,
 				'file_size'   => $file_size,
 				'provider'    => self::get_provider(),
+				'status'      => sanitize_key( (string) $status ),
+				'upload_token_hash' => sanitize_text_field( (string) $upload_token_hash ),
+				'expires_at'  => sanitize_text_field( (string) $expires_at ),
 				'uploaded_at' => current_time( 'mysql' ),
 			],
-			[ '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' ]
+			[ '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s' ]
 		);
 
 		return [
@@ -414,7 +426,7 @@ class EP_Cloud_Storage {
 		$charset_collate = $wpdb->get_charset_collate();
 
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) ) === $table_name ) {
-			return; // Table already exists
+			// Continue through dbDelta so new metadata columns are added on upgrade.
 		}
 
 		$sql = "CREATE TABLE $table_name (
@@ -426,9 +438,13 @@ class EP_Cloud_Storage {
 			file_url LONGTEXT NOT NULL,
 			file_size BIGINT NOT NULL,
 			provider VARCHAR(50) NOT NULL,
+			status VARCHAR(30) NOT NULL DEFAULT 'uploaded',
+			upload_token_hash VARCHAR(64) DEFAULT '',
+			expires_at DATETIME DEFAULT NULL,
 			uploaded_at DATETIME NOT NULL,
 			KEY form_id (form_id),
-			KEY entry_id (entry_id)
+			KEY entry_id (entry_id),
+			KEY field_status (form_id, field_name, status)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';

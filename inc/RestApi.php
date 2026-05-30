@@ -43,6 +43,10 @@ class RestApi {
 					'required'          => false,
 					'sanitize_callback' => 'sanitize_key',
 				],
+				'checksum' => [
+					'required'          => false,
+					'sanitize_callback' => 'sanitize_text_field',
+				],
 			],
 		] );
 
@@ -99,6 +103,12 @@ class RestApi {
 				],
 			],
 		] );
+
+		register_rest_route( 'enterprise-forms/v1', '/health', [
+			'methods'             => 'GET',
+			'callback'            => [ $this, 'get_health' ],
+			'permission_callback' => [ $this, 'check_admin_permissions' ],
+		] );
 	}
 
 	public function check_admin_permissions(): bool {
@@ -124,11 +134,13 @@ class RestApi {
 	 * Handle upload intent request - generate pre-signed URL.
 	 */
 	public function handle_upload_intent( \WP_REST_Request $request ): \WP_REST_Response {
+		$correlation_id = Observability::correlation_id();
 		$file_name = $request->get_param( 'file_name' );
 		$mime_type = $request->get_param( 'mime_type' );
 		$file_size = $request->get_param( 'file_size' );
 		$form_id   = $request->get_param( 'form_id' );
 		$field_name = sanitize_key( (string) $request->get_param( 'field_name' ) );
+		$checksum = sanitize_text_field( (string) $request->get_param( 'checksum' ) );
 
 		// Validate all required parameters
 		if ( ! $file_name || ! $mime_type || ! $file_size || ! $form_id ) {
@@ -158,6 +170,7 @@ class RestApi {
 		$upload_constraints = $this->extract_upload_constraints( is_array( $schema ) ? $schema : [], $field_name );
 
 		if ( is_wp_error( $upload_constraints ) ) {
+			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
 					$upload_constraints->get_error_code(),
@@ -175,6 +188,7 @@ class RestApi {
 		$validation = \EP_Cloud_Storage::validate_upload_intent( $file_name, $mime_type, $file_size, $form_id, $allowed_types, $max_size );
 
 		if ( is_wp_error( $validation ) ) {
+			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
 					$validation->get_error_code(),
@@ -185,17 +199,21 @@ class RestApi {
 		}
 
 		// Generate pre-signed URL
-		$upload_intent = \EP_Cloud_Storage::generate_upload_intent( $file_name, $mime_type, $file_size, $form_id );
+		$upload_intent = \EP_Cloud_Storage::generate_upload_intent( $file_name, $mime_type, $file_size, $form_id, $field_name, $allowed_types, $max_size, $checksum );
 
 		if ( is_wp_error( $upload_intent ) ) {
+			Observability::increment_metric( 'upload_rejects' );
+			Observability::log( 'error', 'upload_intent_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id, 'code' => $upload_intent->get_error_code() ] );
 			return rest_ensure_response(
 				new \WP_Error(
 					$upload_intent->get_error_code(),
-					$upload_intent->get_error_message(),
+					__( 'Unable to prepare file upload.', 'enterprise-forms' ),
 					[ 'status' => 400 ]
 				)
 			);
 		}
+
+		Observability::increment_metric( 'upload_intents_created' );
 
 		return rest_ensure_response( $upload_intent );
 	}
@@ -273,7 +291,7 @@ class RestApi {
 			}
 
 			if ( 'image/*' === $token ) {
-				$extensions = array_merge( $extensions, [ 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg' ] );
+				$extensions = array_merge( $extensions, [ 'jpg', 'jpeg', 'png', 'gif', 'webp' ] );
 				continue;
 			}
 
@@ -295,6 +313,7 @@ class RestApi {
 	 * Handle direct file upload via pre-signed URL.
 	 */
 	public function handle_direct_upload( \WP_REST_Request $request ): \WP_REST_Response {
+		$correlation_id = Observability::correlation_id();
 		$token = $request->get_param( 'token' );
 
 		if ( ! $token ) {
@@ -307,9 +326,9 @@ class RestApi {
 			);
 		}
 
-		// Verify token
 		$upload_data = json_decode( get_transient( "ep_upload_token_$token" ), true );
 		if ( ! $upload_data ) {
+			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
 					'invalid_token',
@@ -318,11 +337,13 @@ class RestApi {
 				)
 			);
 		}
+		delete_transient( "ep_upload_token_$token" );
 
 		// Get request body as file content
 		$file_content = $request->get_body();
 
 		if ( empty( $file_content ) ) {
+			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
 					'empty_file',
@@ -333,6 +354,7 @@ class RestApi {
 		}
 
 		if ( strlen( $file_content ) !== (int) ( $upload_data['file_size'] ?? 0 ) ) {
+			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
 					'file_size_mismatch',
@@ -342,12 +364,30 @@ class RestApi {
 			);
 		}
 
-		// Save file locally (or to cloud)
+		$file_name = sanitize_file_name( (string) ( $upload_data['file_name'] ?? '' ) );
+		$allowed_types = isset( $upload_data['allowed_types'] ) && is_array( $upload_data['allowed_types'] )
+			? array_map( 'sanitize_key', $upload_data['allowed_types'] )
+			: [];
+		$detected_type = $this->validate_local_upload_content( $file_content, $file_name, $allowed_types );
+
+		if ( is_wp_error( $detected_type ) ) {
+			Observability::increment_metric( 'upload_rejects' );
+			Observability::log( 'warning', 'upload_content_rejected', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ), 'code' => $detected_type->get_error_code() ] );
+			return rest_ensure_response(
+				new \WP_Error(
+					$detected_type->get_error_code(),
+					$detected_type->get_error_message(),
+					[ 'status' => 400 ]
+				)
+			);
+		}
+
 		$upload_dir = wp_upload_dir();
 		$ep_upload_dir = $upload_dir['basedir'] . '/ep-uploads/' . $upload_data['form_id'] . '/';
 
 		// Create directory if it doesn't exist
 		if ( ! wp_mkdir_p( $ep_upload_dir ) ) {
+			Observability::log( 'error', 'upload_directory_failed', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ) ] );
 			return rest_ensure_response(
 				new \WP_Error(
 					'upload_dir_error',
@@ -358,11 +398,12 @@ class RestApi {
 		}
 
 		// Save the file
-		$file_name = wp_unique_filename( $ep_upload_dir, sanitize_file_name( $upload_data['file_name'] ) );
-		$file_path = $ep_upload_dir . $file_name;
+		$stored_file_name = wp_unique_filename( $ep_upload_dir, $file_name );
+		$file_path = $ep_upload_dir . $stored_file_name;
 		$bytes_written = file_put_contents( $file_path, $file_content );
 
 		if ( $bytes_written === false ) {
+			Observability::log( 'error', 'upload_write_failed', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ) ] );
 			return rest_ensure_response(
 				new \WP_Error(
 					'file_write_error',
@@ -374,22 +415,58 @@ class RestApi {
 
 		// Store metadata
 		require_once plugin_dir_path( __FILE__ ) . 'class-ep-cloud-storage.php';
-		$file_url = $upload_dir['baseurl'] . '/ep-uploads/' . $upload_data['form_id'] . '/' . $file_name;
+		$file_url = $upload_dir['baseurl'] . '/ep-uploads/' . $upload_data['form_id'] . '/' . $stored_file_name;
 
 		$metadata = \EP_Cloud_Storage::store_upload_metadata(
 			$file_url,
-			$file_name,
+			$stored_file_name,
 			$upload_data['file_size'],
-			$upload_data['form_id']
+			$upload_data['form_id'],
+			'',
+			sanitize_key( (string) ( $upload_data['field_name'] ?? '' ) ),
+			'uploaded',
+			hash_hmac( 'sha256', (string) $token, wp_salt( 'nonce' ) ),
+			gmdate( 'Y-m-d H:i:s', (int) ( $upload_data['expires_at'] ?? time() ) )
 		);
-
-		// Clean up transient
-		delete_transient( "ep_upload_token_$token" );
+		Observability::increment_metric( 'uploads_accepted' );
 
 		return rest_ensure_response( [
 			'success' => true,
 			'file'    => $metadata,
 		] );
+	}
+
+	public function get_health(): \WP_REST_Response {
+		return rest_ensure_response( Observability::health() );
+	}
+
+	/**
+	 * @param string[] $allowed_types
+	 */
+	private function validate_local_upload_content( string $file_content, string $file_name, array $allowed_types ): bool|\WP_Error {
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+
+		$temp_file = wp_tempnam( $file_name );
+		if ( ! is_string( $temp_file ) || '' === $temp_file ) {
+			return new \WP_Error( 'upload_temp_file_failed', __( 'Unable to inspect uploaded file.', 'enterprise-forms' ) );
+		}
+
+		file_put_contents( $temp_file, $file_content );
+		$detected = wp_check_filetype_and_ext( $temp_file, $file_name );
+		@unlink( $temp_file );
+
+		$extension = strtolower( (string) ( $detected['ext'] ?? pathinfo( $file_name, PATHINFO_EXTENSION ) ) );
+		$mime_type = strtolower( (string) ( $detected['type'] ?? '' ) );
+
+		if ( '' === $extension || '' === $mime_type ) {
+			return new \WP_Error( 'file_type_not_detected', __( 'Uploaded file type could not be verified.', 'enterprise-forms' ) );
+		}
+
+		if ( ! empty( $allowed_types ) && ! in_array( $extension, array_map( 'strtolower', $allowed_types ), true ) ) {
+			return new \WP_Error( 'file_type_not_allowed', __( 'Uploaded file type is not allowed for this field.', 'enterprise-forms' ) );
+		}
+
+		return true;
 	}
 
 	public function get_admin_stats(): \WP_REST_Response {

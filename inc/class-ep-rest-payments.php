@@ -111,34 +111,44 @@ class EP_REST_Payments extends WP_REST_Controller {
 	}
 
 	public function create_payment_intent( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$correlation_id = Observability::correlation_id();
 		$form_id = absint( $request->get_param( 'form_id' ) );
 		$values  = $request->get_param( 'values' );
 		$values  = is_array( $values ) ? $values : [];
 
 		try {
 			$schema       = $this->load_form_schema( $form_id );
+			$schema_version = $this->resolve_schema_version( $schema, sanitize_text_field( (string) $request->get_param( 'schema_version' ) ) );
 			$payment      = $this->calculate_payment_from_schema( $schema, $values );
 			$gateway_slug = $this->payment_factory->resolve_gateway_from_schema( $schema );
 			$gateway      = $this->payment_factory->make( $gateway_slug );
+			$record_id    = wp_generate_uuid4();
 			$intent       = $gateway->create_intent(
 				(int) $payment['amount'],
 				$payment['currency'],
 				[
-					'form_id'     => (string) $form_id,
-					'description' => $payment['description'],
+					'form_id'        => (string) $form_id,
+					'schema_version' => $schema_version,
+					'record_id'      => $record_id,
+					'description'    => $payment['description'],
 				]
 			);
+			$intent_id = sanitize_text_field( (string) ( $intent['id'] ?? '' ) );
+			$this->store_payment_intent_record( $record_id, $gateway_slug, $intent_id, $form_id, $schema_version, (int) $payment['amount'], $payment['currency'], 'created' );
 		} catch ( Exception $exception ) {
+			Observability::increment_metric( 'payment_failures' );
+			Observability::log( 'error', 'payment_intent_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id, 'message' => $exception->getMessage() ] );
 			return new WP_Error(
 				'ep_forms_payment_intent_failed',
-				$exception->getMessage(),
-				[ 'status' => 400 ]
+				__( 'Unable to prepare payment. Please try again.', 'enterprise-forms' ),
+				[ 'status' => 400, 'correlation_id' => $correlation_id ]
 			);
 		}
 
 		return rest_ensure_response(
 			[
-				'id'              => sanitize_text_field( (string) ( $intent['id'] ?? '' ) ),
+				'id'              => $intent_id ?: $record_id,
+				'payment_record_id' => $record_id,
 				'client_secret'   => sanitize_text_field( (string) ( $intent['client_secret'] ?? '' ) ),
 				'client_token'    => sanitize_text_field( (string) ( $intent['client_token'] ?? '' ) ),
 				'amount'          => (int) $payment['amount'],
@@ -156,6 +166,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 	 * @return array<string, mixed>|WP_Error
 	 */
 	public function verify_payment_for_submission( int $form_id, array $payload, array $sanitized ): array|WP_Error {
+		$correlation_id = Observability::correlation_id();
 		try {
 			$schema = $this->load_form_schema( $form_id );
 			if ( ! $this->schema_requires_payment( $schema ) ) {
@@ -164,6 +175,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 
 			$gateway_slug  = $this->payment_factory->resolve_gateway_from_schema( $schema );
 			$payment_id    = sanitize_text_field( (string) ( $payload['payment_intent_id'] ?? $payload['payment_transaction_id'] ?? '' ) );
+			$payment_record_id = sanitize_text_field( (string) ( $payload['payment_record_id'] ?? '' ) );
 			$payment_token = sanitize_text_field( (string) ( $payload['payment_token'] ?? '' ) );
 			if ( '' === $payment_id ) {
 				$payment_id = $payment_token;
@@ -178,12 +190,28 @@ class EP_REST_Payments extends WP_REST_Controller {
 			}
 
 			$expected = $this->calculate_payment_from_schema( $schema, $payload );
+			$schema_version = $this->resolve_schema_version( $schema, sanitize_text_field( (string) ( $payload['schema_version'] ?? '' ) ) );
+			$record = $this->load_payment_intent_record( $gateway_slug, $payment_id, $payment_record_id );
+			if ( is_wp_error( $record ) ) {
+				return $record;
+			}
+
+			$record_check = $this->validate_payment_intent_record( $record, $form_id, $schema_version, (int) $expected['amount'], $expected['currency'] );
+			if ( is_wp_error( $record_check ) ) {
+				return $record_check;
+			}
+
 			$gateway  = $this->payment_factory->make( $gateway_slug );
 			if ( 'braintree' === $gateway_slug && '' !== $payment_token && method_exists( $gateway, 'process_token' ) ) {
-				$intent     = $gateway->process_token( $payment_token, (int) $expected['amount'], $expected['currency'], [ 'form_id' => (string) $form_id ] );
+				$intent     = $gateway->process_token( $payment_token, (int) $expected['amount'], $expected['currency'], [ 'form_id' => (string) $form_id, 'schema_version' => $schema_version, 'record_id' => (string) $record['record_id'] ] );
 				$payment_id = sanitize_text_field( (string) ( $intent['id'] ?? '' ) );
 			} else {
 				$intent = $gateway->verify_payment( $payment_id );
+			}
+
+			$metadata_check = $this->validate_gateway_metadata( $intent, $form_id, $schema_version, (string) $record['record_id'] );
+			if ( is_wp_error( $metadata_check ) ) {
+				return $metadata_check;
 			}
 
 			$status = sanitize_key( (string) ( $intent['status'] ?? '' ) );
@@ -205,12 +233,18 @@ class EP_REST_Payments extends WP_REST_Controller {
 				);
 			}
 
+			$claim_result = $this->claim_payment_transaction( (int) $record['id'], $gateway_slug, $payment_id );
+			if ( is_wp_error( $claim_result ) ) {
+				return $claim_result;
+			}
+
 			$payment_log = [
 				'gateway'        => $gateway_slug,
 				'transaction_id' => $payment_id,
 				'amount'         => $paid_amount,
 				'currency'       => $paid_currency,
 				'receipt_url'    => $this->extract_receipt_url( $intent ),
+				'status'         => 'paid',
 			];
 
 			$sanitized['payment']        = $payment_log;
@@ -220,10 +254,12 @@ class EP_REST_Payments extends WP_REST_Controller {
 
 			return $sanitized;
 		} catch ( Exception $exception ) {
+			Observability::increment_metric( 'payment_failures' );
+			Observability::log( 'error', 'payment_verification_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id, 'message' => $exception->getMessage() ] );
 			return new WP_Error(
 				'ep_forms_payment_verification_failed',
-				$exception->getMessage(),
-				[ 'status' => 400 ]
+				__( 'Unable to verify payment. Please try again.', 'enterprise-forms' ),
+				[ 'status' => 400, 'correlation_id' => $correlation_id ]
 			);
 		}
 	}
@@ -290,6 +326,189 @@ class EP_REST_Payments extends WP_REST_Controller {
 	 */
 	private function schema_requires_payment( array $schema ): bool {
 		return ! empty( $schema['requires_payment'] ) || null !== $this->find_payment_field( $schema );
+	}
+
+	private function resolve_schema_version( array $schema, string $requested_version = '' ): string {
+		$schema_version = sanitize_text_field( (string) ( $schema['version'] ?? $schema['schema_version'] ?? '' ) );
+		if ( '' !== $requested_version ) {
+			return $requested_version;
+		}
+
+		return '' !== $schema_version ? $schema_version : '1.0.0';
+	}
+
+	private function create_payment_intents_table(): void {
+		global $wpdb;
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$table_name = $wpdb->prefix . 'ep_payment_intents';
+		$charset_collate = $wpdb->get_charset_collate();
+		$sql = "CREATE TABLE {$table_name} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			record_id CHAR(36) NOT NULL,
+			gateway VARCHAR(50) NOT NULL,
+			intent_id VARCHAR(191) DEFAULT '' NOT NULL,
+			transaction_id VARCHAR(191) DEFAULT '' NOT NULL,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			schema_version VARCHAR(50) DEFAULT '' NOT NULL,
+			amount BIGINT(20) UNSIGNED NOT NULL,
+			currency VARCHAR(10) NOT NULL,
+			session_hash VARCHAR(64) DEFAULT '' NOT NULL,
+			status VARCHAR(30) DEFAULT 'created' NOT NULL,
+			entry_uuid CHAR(36) DEFAULT '' NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY record_id (record_id),
+			UNIQUE KEY gateway_intent (gateway, intent_id),
+			UNIQUE KEY gateway_transaction (gateway, transaction_id),
+			KEY form_status (form_id, status),
+			KEY expires_at (expires_at)
+		) {$charset_collate};";
+
+		dbDelta( $sql );
+	}
+
+	private function store_payment_intent_record( string $record_id, string $gateway, string $intent_id, int $form_id, string $schema_version, int $amount, string $currency, string $status ): void {
+		global $wpdb;
+
+		$this->create_payment_intents_table();
+		$stored_intent_id = '' !== $intent_id ? $intent_id : $record_id;
+		$now = current_time( 'mysql', true );
+		$wpdb->insert(
+			$wpdb->prefix . 'ep_payment_intents',
+			[
+				'record_id'      => $record_id,
+				'gateway'        => $gateway,
+				'intent_id'      => $stored_intent_id,
+				'transaction_id' => '',
+				'form_id'        => $form_id,
+				'schema_version' => $schema_version,
+				'amount'         => $amount,
+				'currency'       => strtolower( $currency ),
+				'session_hash'   => $this->payment_session_hash(),
+				'status'         => $status,
+				'entry_uuid'     => '',
+				'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
+				'created_at'     => $now,
+				'updated_at'     => $now,
+			],
+			[ '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>|WP_Error
+	 */
+	private function load_payment_intent_record( string $gateway, string $payment_id, string $record_id ): array|WP_Error {
+		global $wpdb;
+
+		$this->create_payment_intents_table();
+		$table_name = $wpdb->prefix . 'ep_payment_intents';
+
+		if ( '' !== $record_id ) {
+			$record = $wpdb->get_row(
+				$wpdb->prepare( "SELECT * FROM {$table_name} WHERE gateway = %s AND record_id = %s LIMIT 1", $gateway, $record_id ),
+				ARRAY_A
+			);
+		} else {
+			$record = $wpdb->get_row(
+				$wpdb->prepare( "SELECT * FROM {$table_name} WHERE gateway = %s AND intent_id = %s LIMIT 1", $gateway, $payment_id ),
+				ARRAY_A
+			);
+		}
+
+		if ( ! is_array( $record ) ) {
+			return new WP_Error( 'ep_forms_payment_intent_not_found', __( 'Payment intent could not be matched to this form submission.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		return $record;
+	}
+
+	/**
+	 * @param array<string, mixed> $record
+	 */
+	private function validate_payment_intent_record( array $record, int $form_id, string $schema_version, int $amount, string $currency ): bool|WP_Error {
+		if ( (int) $record['form_id'] !== $form_id || (string) $record['schema_version'] !== $schema_version ) {
+			return new WP_Error( 'ep_forms_payment_form_mismatch', __( 'Payment intent does not belong to this form version.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		if ( (int) $record['amount'] !== $amount || strtolower( (string) $record['currency'] ) !== strtolower( $currency ) ) {
+			return new WP_Error( 'ep_forms_payment_amount_mismatch', __( 'Payment amount does not match the saved payment intent.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		if ( 'paid' === sanitize_key( (string) $record['status'] ) || '' !== (string) $record['entry_uuid'] ) {
+			return new WP_Error( 'ep_forms_payment_replay_detected', __( 'This payment has already been used for a submission.', 'enterprise-forms' ), [ 'status' => 409 ] );
+		}
+
+		if ( strtotime( (string) $record['expires_at'] ) < time() ) {
+			return new WP_Error( 'ep_forms_payment_intent_expired', __( 'Payment intent has expired. Please refresh the form and try again.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $intent
+	 */
+	private function validate_gateway_metadata( array $intent, int $form_id, string $schema_version, string $record_id ): bool|WP_Error {
+		$metadata = isset( $intent['metadata'] ) && is_array( $intent['metadata'] ) ? $intent['metadata'] : [];
+		if ( empty( $metadata ) ) {
+			return true;
+		}
+
+		if ( isset( $metadata['form_id'] ) && (string) $metadata['form_id'] !== (string) $form_id ) {
+			return new WP_Error( 'ep_forms_payment_form_mismatch', __( 'Payment metadata does not match this form.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		if ( isset( $metadata['schema_version'] ) && (string) $metadata['schema_version'] !== $schema_version ) {
+			return new WP_Error( 'ep_forms_payment_schema_mismatch', __( 'Payment metadata does not match this form version.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		if ( isset( $metadata['record_id'] ) && (string) $metadata['record_id'] !== $record_id ) {
+			return new WP_Error( 'ep_forms_payment_record_mismatch', __( 'Payment metadata does not match the local payment record.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		return true;
+	}
+
+	private function claim_payment_transaction( int $record_id, string $gateway, string $transaction_id ): bool|WP_Error {
+		global $wpdb;
+
+		$table_name = $wpdb->prefix . 'ep_payment_intents';
+		$existing = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT record_id FROM {$table_name} WHERE gateway = %s AND transaction_id = %s AND status = 'paid' LIMIT 1",
+				$gateway,
+				$transaction_id
+			)
+		);
+
+		if ( $existing ) {
+			return new WP_Error( 'ep_forms_payment_replay_detected', __( 'This payment has already been used for a submission.', 'enterprise-forms' ), [ 'status' => 409 ] );
+		}
+
+		$updated = $wpdb->update(
+			$table_name,
+			[
+				'transaction_id' => $transaction_id,
+				'status'         => 'paid',
+				'updated_at'     => current_time( 'mysql', true ),
+			],
+			[ 'id' => $record_id ],
+			[ '%s', '%s', '%s' ],
+			[ '%d' ]
+		);
+
+		return false !== $updated ? true : new WP_Error( 'ep_forms_payment_claim_failed', __( 'Unable to reserve payment transaction for this submission.', 'enterprise-forms' ), [ 'status' => 500 ] );
+	}
+
+	private function payment_session_hash(): string {
+		$ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( (string) $_SERVER['REMOTE_ADDR'] ) ) : '';
+
+		return hash_hmac( 'sha256', $ip_address, wp_salt( 'nonce' ) );
 	}
 
 	/**

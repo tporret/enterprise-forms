@@ -13,6 +13,9 @@
       "EnterpriseForms\\": "inc/"
     }
   },
+  "scripts": {
+    "security:smoke": "php tests/security/submission-security-smoke.php"
+  },
   "config": {
     "optimize-autoloader": true,
     "sort-packages": true

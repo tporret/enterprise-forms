@@ -46,6 +46,10 @@ class EP_REST_Entries extends WP_REST_Controller {
 							'required'          => false,
 							'sanitize_callback' => 'sanitize_text_field',
 						],
+						'ep_submission_token' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 					],
 				],
 				[
@@ -76,8 +80,11 @@ class EP_REST_Entries extends WP_REST_Controller {
 	}
 
 	public function create_item_permissions_check( $request ): bool|WP_Error {
+		$correlation_id = Observability::correlation_id();
+		$form_id = absint( $request['form_id'] ?? 0 );
 		$honeypot = sanitize_text_field( (string) $request->get_param( 'hp_field' ) );
 		if ( '' !== $honeypot ) {
+			Observability::increment_metric( 'spam_blocks' );
 			return new WP_Error(
 				'ep_forms_spam_detected',
 				__( 'Spam submission detected.', 'enterprise-forms' ),
@@ -85,26 +92,24 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$header_nonce = sanitize_text_field( (string) $request->get_header( 'X-WP-Nonce' ) );
-		if ( '' !== $header_nonce && wp_verify_nonce( $header_nonce, 'wp_rest' ) ) {
-			return true;
-		}
-
 		$public_nonce = sanitize_text_field( (string) $request->get_param( 'ep_forms_nonce' ) );
-		if ( '' !== $public_nonce && wp_verify_nonce( $public_nonce, 'ep_forms_public_submit' ) ) {
-			return true;
+		if ( '' === $public_nonce || ! wp_verify_nonce( $public_nonce, 'ep_forms_public_submit' ) ) {
+			Observability::increment_metric( 'submission_nonce_failures' );
+			return new WP_Error(
+				'ep_forms_invalid_nonce',
+				__( 'Invalid or missing security token.', 'enterprise-forms' ),
+				[ 'status' => 403 ]
+			);
 		}
 
-		// Allow empty honeypot-only verification for low-friction public forms.
-		if ( null !== $request->get_param( 'hp_field' ) ) {
-			return true;
+		$rate_limited = $this->check_rate_limit( $form_id );
+		if ( is_wp_error( $rate_limited ) ) {
+			Observability::increment_metric( 'rate_limit_blocks' );
+			Observability::log( 'warning', 'submission_rate_limited', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id ] );
+			return $rate_limited;
 		}
 
-		return new WP_Error(
-			'ep_forms_invalid_nonce',
-			__( 'Invalid or missing security token.', 'enterprise-forms' ),
-			[ 'status' => 403 ]
-		);
+		return $this->consume_submission_token( $request, $form_id );
 	}
 
 	public function get_items_permissions_check( $request ): bool|WP_Error {
@@ -125,6 +130,15 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$payload         = $request->get_params();
 		$file_payload    = $request->get_file_params();
 
+		if ( ! EP_Crypto::is_configured() ) {
+			Observability::increment_metric( 'submission_encryption_blocks' );
+			return new WP_Error(
+				'ep_forms_encryption_key_missing',
+				__( 'This form is temporarily unavailable because encryption is not configured.', 'enterprise-forms' ),
+				[ 'status' => 503 ]
+			);
+		}
+
 		if ( is_array( $file_payload ) ) {
 			foreach ( $file_payload as $file_key => $file_value ) {
 				if ( is_string( $file_key ) ) {
@@ -133,7 +147,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			}
 		}
 
-		unset( $payload['form_id'], $payload['schema_version'], $payload['ep_forms_nonce'], $payload['hp_field'] );
+		unset( $payload['form_id'], $payload['schema_version'], $payload['ep_forms_nonce'], $payload['ep_submission_token'], $payload['hp_field'] );
 
 		try {
 			$validation = $this->validator->validate_payload( $payload, $form_id, $schema_version );
@@ -146,6 +160,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		if ( ! $validation['is_valid'] ) {
+			Observability::increment_metric( 'validation_failures' );
 			return new WP_Error(
 				'ep_forms_validation_failed',
 				__( 'Validation failed.', 'enterprise-forms' ),
@@ -156,12 +171,24 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$payment_sanitized = $this->payments->verify_payment_for_submission( $form_id, $payload, $validation['sanitized'] );
+		$file_reference_check = $this->validate_uploaded_file_references( $form_id, $validation['sanitized'] );
+		if ( is_wp_error( $file_reference_check ) ) {
+			return $file_reference_check;
+		}
+
+		$payment_payload = $payload;
+		$payment_payload['schema_version'] = $schema_version;
+		$payment_sanitized = $this->payments->verify_payment_for_submission( $form_id, $payment_payload, $validation['sanitized'] );
 		if ( is_wp_error( $payment_sanitized ) ) {
 			return $payment_sanitized;
 		}
 
 		$validation['sanitized'] = $payment_sanitized;
+
+		$duplicate_check = $this->check_duplicate_submission( $form_id, $validation['sanitized'] );
+		if ( is_wp_error( $duplicate_check ) ) {
+			return $duplicate_check;
+		}
 
 		if ( is_array( $file_payload ) && ! empty( $file_payload ) ) {
 			try {
@@ -187,6 +214,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$created_at = current_time( 'mysql', true );
 
 		if ( false === $payload_json ) {
+			Observability::log( 'error', 'submission_payload_encode_failed', [ 'form_id' => $form_id ] );
 			return new WP_Error(
 				'ep_forms_payload_encode_failed',
 				__( 'Unable to encode submission payload.', 'enterprise-forms' ),
@@ -197,9 +225,10 @@ class EP_REST_Entries extends WP_REST_Controller {
 		try {
 			$encrypted_payload = $this->crypto->encrypt( $payload_json );
 		} catch ( Exception $exception ) {
+			Observability::log( 'error', 'submission_encryption_failed', [ 'form_id' => $form_id, 'message' => $exception->getMessage() ] );
 			return new WP_Error(
 				'ep_forms_encryption_failed',
-				$exception->getMessage(),
+				__( 'Unable to securely process this submission.', 'enterprise-forms' ),
 				[ 'status' => 500 ]
 			);
 		}
@@ -226,6 +255,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		);
 
 		if ( false === $inserted ) {
+			Observability::log( 'error', 'submission_insert_failed', [ 'form_id' => $form_id ] );
 			return new WP_Error(
 				'ep_forms_insert_failed',
 				__( 'Failed to save submission.', 'enterprise-forms' ),
@@ -233,7 +263,16 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
+		$this->mark_submission_fingerprint( $form_id, $validation['sanitized'] );
+		$this->attach_uploaded_file_references( $form_id, $uuid, $validation['sanitized'] );
+		$this->attach_payment_record( $uuid, $validation['sanitized'] );
+
 		$notification_sent = ( new NotificationService() )->send_submission_notification( $form_id, $uuid, $created_at, $validation['sanitized'] );
+		Observability::increment_metric( 'submissions_accepted' );
+		if ( ! $notification_sent ) {
+			Observability::increment_metric( 'notification_failures' );
+			Observability::log( 'warning', 'notification_failed', [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
+		}
 
 		return new WP_REST_Response(
 			[
@@ -314,6 +353,215 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		return $persisted;
+	}
+
+	private function consume_submission_token( WP_REST_Request $request, int $form_id ): bool|WP_Error {
+		$token = sanitize_text_field( (string) $request->get_param( 'ep_submission_token' ) );
+		if ( '' === $token ) {
+			return new WP_Error(
+				'ep_forms_missing_submission_token',
+				__( 'Missing submission token.', 'enterprise-forms' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		$transient_key = $this->submission_token_key( $token );
+		$stored_form_id = absint( get_transient( $transient_key ) );
+		if ( $stored_form_id !== $form_id ) {
+			return new WP_Error(
+				'ep_forms_replay_detected',
+				__( 'This form submission token is invalid or has already been used.', 'enterprise-forms' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		delete_transient( $transient_key );
+
+		return true;
+	}
+
+	private function check_rate_limit( int $form_id ): bool|WP_Error {
+		$limit = (int) apply_filters( 'ep_forms_submission_rate_limit', 10, $form_id );
+		$window = (int) apply_filters( 'ep_forms_submission_rate_window', MINUTE_IN_SECONDS, $form_id );
+
+		if ( $limit < 1 || $window < 1 ) {
+			return true;
+		}
+
+		$key = 'ep_submit_rate_' . $form_id . '_' . $this->request_fingerprint();
+		$count = absint( get_transient( $key ) );
+		if ( $count >= $limit ) {
+			return new WP_Error(
+				'ep_forms_rate_limited',
+				__( 'Too many submissions. Please wait a moment and try again.', 'enterprise-forms' ),
+				[ 'status' => 429 ]
+			);
+		}
+
+		set_transient( $key, $count + 1, $window );
+
+		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function check_duplicate_submission( int $form_id, array $payload ): bool|WP_Error {
+		$key = $this->submission_fingerprint_key( $form_id, $payload );
+		if ( get_transient( $key ) ) {
+			return new WP_Error(
+				'ep_forms_duplicate_submission',
+				__( 'This submission looks like a duplicate. Please wait a moment before trying again.', 'enterprise-forms' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function mark_submission_fingerprint( int $form_id, array $payload ): void {
+		set_transient( $this->submission_fingerprint_key( $form_id, $payload ), 1, 5 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function submission_fingerprint_key( int $form_id, array $payload ): string {
+		ksort( $payload );
+		$payload_json = wp_json_encode( $payload );
+		$hash_source = $form_id . '|' . ( false === $payload_json ? '' : $payload_json ) . '|' . $this->request_fingerprint();
+
+		return 'ep_submit_dup_' . hash_hmac( 'sha256', $hash_source, wp_salt( 'nonce' ) );
+	}
+
+	private function request_fingerprint(): string {
+		$ip_address = '';
+		if ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip_address = sanitize_text_field( wp_unslash( (string) $_SERVER['REMOTE_ADDR'] ) );
+		}
+
+		return hash_hmac( 'sha256', $ip_address, wp_salt( 'nonce' ) );
+	}
+
+	private function submission_token_key( string $token ): string {
+		return 'ep_submit_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function validate_uploaded_file_references( int $form_id, array $payload ): bool|WP_Error {
+		foreach ( $this->extract_file_reference_rows( $form_id, $payload ) as $field_name => $references ) {
+			foreach ( $references as $reference ) {
+				if ( ! $this->uploaded_file_reference_exists( $form_id, $field_name, $reference ) ) {
+					return new WP_Error(
+						'ep_forms_invalid_file_reference',
+						__( 'Uploaded file reference is invalid or expired.', 'enterprise-forms' ),
+						[ 'status' => 400 ]
+					);
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function attach_uploaded_file_references( int $form_id, string $entry_uuid, array $payload ): void {
+		global $wpdb;
+
+		foreach ( $this->extract_file_reference_rows( $form_id, $payload ) as $field_name => $references ) {
+			foreach ( $references as $reference ) {
+				$wpdb->update(
+					$wpdb->prefix . 'ep_file_uploads',
+					[
+						'entry_id' => $entry_uuid,
+						'status'   => 'attached_to_entry',
+					],
+					[
+						'form_id'    => (string) $form_id,
+						'field_name' => $field_name,
+						'file_url'   => $reference,
+					],
+					[ '%s', '%s' ],
+					[ '%s', '%s', '%s' ]
+				);
+			}
+		}
+	}
+
+	private function uploaded_file_reference_exists( int $form_id, string $field_name, string $reference ): bool {
+		global $wpdb;
+
+		$table_name = $wpdb->prefix . 'ep_file_uploads';
+
+		return (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table_name} WHERE form_id = %s AND field_name = %s AND file_url = %s AND status IN ('uploaded', 'created') LIMIT 1",
+				(string) $form_id,
+				$field_name,
+				$reference
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, array<int, string>>
+	 */
+	private function extract_file_reference_rows( int $form_id, array $payload ): array {
+		$schema_raw = get_post_meta( $form_id, 'ep_form_schema', true );
+		$schema = is_string( $schema_raw ) ? json_decode( $schema_raw, true ) : null;
+		$fields = is_array( $schema ) && isset( $schema['fields'] ) && is_array( $schema['fields'] ) ? $schema['fields'] : [];
+		$references = [];
+
+		foreach ( $fields as $index => $field ) {
+			if ( ! is_array( $field ) || 'file' !== sanitize_key( (string) ( $field['type'] ?? '' ) ) ) {
+				continue;
+			}
+
+			$field_id = sanitize_key( (string) ( $field['id'] ?? 'field_' . $index ) );
+			$field_name = sanitize_key( (string) ( $field['name'] ?? $field_id ) );
+			$value = $payload[ $field_name ] ?? null;
+
+			if ( is_string( $value ) && '' !== $value ) {
+				$references[ $field_name ][] = esc_url_raw( $value );
+			}
+		}
+
+		return $references;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function attach_payment_record( string $entry_uuid, array $payload ): void {
+		$payment = isset( $payload['payment'] ) && is_array( $payload['payment'] ) ? $payload['payment'] : [];
+		$transaction_id = sanitize_text_field( (string) ( $payment['transaction_id'] ?? '' ) );
+		$gateway = sanitize_key( (string) ( $payment['gateway'] ?? '' ) );
+		if ( '' === $transaction_id || '' === $gateway ) {
+			return;
+		}
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->prefix . 'ep_payment_intents',
+			[
+				'entry_uuid' => $entry_uuid,
+				'updated_at' => current_time( 'mysql', true ),
+			],
+			[
+				'gateway'        => $gateway,
+				'transaction_id' => $transaction_id,
+			],
+			[ '%s', '%s' ],
+			[ '%s', '%s' ]
+		);
 	}
 
 	/**

@@ -22,7 +22,14 @@ class EP_Gateway_Stripe implements EP_Payment_Gateway {
 
 	public function create_intent( int $amount, string $currency, array $meta ): array {
 		$description = sanitize_text_field( (string) ( $meta['description'] ?? '' ) );
-		$form_id     = sanitize_text_field( (string) ( $meta['form_id'] ?? '' ) );
+		$metadata = [];
+		foreach ( $meta as $key => $value ) {
+			if ( 'description' === $key ) {
+				continue;
+			}
+
+			$metadata[ sanitize_key( (string) $key ) ] = sanitize_text_field( (string) $value );
+		}
 
 		if ( class_exists( '\Stripe\StripeClient' ) ) {
 			$stripe = new \Stripe\StripeClient( $this->secret_key() );
@@ -32,24 +39,29 @@ class EP_Gateway_Stripe implements EP_Payment_Gateway {
 					'currency'                  => $currency,
 					'description'               => $description,
 					'automatic_payment_methods' => [ 'enabled' => true ],
-					'metadata'                  => [ 'form_id' => $form_id ],
+					'metadata'                  => $metadata,
 				]
 			);
 
 			return $intent->toArray();
 		}
 
+		$body = [
+			'amount'                            => (string) $amount,
+			'currency'                          => $currency,
+			'description'                       => $description,
+			'automatic_payment_methods[enabled]' => 'true',
+		];
+
+		foreach ( $metadata as $key => $value ) {
+			$body[ 'metadata[' . $key . ']' ] = $value;
+		}
+
 		$response = wp_remote_post(
 			'https://api.stripe.com/v1/payment_intents',
 			[
 				'headers' => [ 'Authorization' => 'Bearer ' . $this->secret_key() ],
-				'body'    => [
-					'amount'                            => (string) $amount,
-					'currency'                          => $currency,
-					'description'                       => $description,
-					'automatic_payment_methods[enabled]' => 'true',
-					'metadata[form_id]'                  => $form_id,
-				],
+				'body'    => $body,
 			]
 		);
 

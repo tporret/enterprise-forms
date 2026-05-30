@@ -22,6 +22,8 @@ class EP_Form_Renderer {
 		}
 
 		$submit_button_text = $this->resolve_submit_button_text( $fields );
+		$submission_token = wp_generate_uuid4();
+		set_transient( $this->submission_token_key( $submission_token ), $form_id, 2 * HOUR_IN_SECONDS );
 
 		ob_start();
 		?>
@@ -111,6 +113,7 @@ class EP_Form_Renderer {
 				value="<?php echo esc_attr( $this->resolve_schema_version( $schema ) ); ?>"
 			/>
 			<?php wp_nonce_field( 'ep_forms_public_submit', 'ep_forms_nonce' ); ?>
+			<input type="hidden" name="ep_submission_token" value="<?php echo esc_attr( $submission_token ); ?>" />
 
 			<?php if ( $is_multi_step ) : ?>
 				<div class="ep-form-row ep-form-navigation">
@@ -226,6 +229,10 @@ class EP_Form_Renderer {
 		<?php
 
 		return (string) ob_get_clean();
+	}
+
+	private function submission_token_key( string $token ): string {
+		return 'ep_submit_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
 	}
 
 	/**

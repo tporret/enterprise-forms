@@ -62,6 +62,33 @@ class EP_Installer {
 
 		dbDelta( $sql );
 
+		$payments_table = $wpdb->prefix . 'ep_payment_intents';
+		$payments_sql = "CREATE TABLE {$payments_table} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			record_id CHAR(36) NOT NULL,
+			gateway VARCHAR(50) NOT NULL,
+			intent_id VARCHAR(191) DEFAULT '' NOT NULL,
+			transaction_id VARCHAR(191) DEFAULT '' NOT NULL,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			schema_version VARCHAR(50) DEFAULT '' NOT NULL,
+			amount BIGINT(20) UNSIGNED NOT NULL,
+			currency VARCHAR(10) NOT NULL,
+			session_hash VARCHAR(64) DEFAULT '' NOT NULL,
+			status VARCHAR(30) DEFAULT 'created' NOT NULL,
+			entry_uuid CHAR(36) DEFAULT '' NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY record_id (record_id),
+			UNIQUE KEY gateway_intent (gateway, intent_id),
+			UNIQUE KEY gateway_transaction (gateway, transaction_id),
+			KEY form_status (form_id, status),
+			KEY expires_at (expires_at)
+		) {$charset_collate};";
+
+		dbDelta( $payments_sql );
+
 		require_once __DIR__ . '/class-ep-cloud-storage.php';
 		\EP_Cloud_Storage::create_uploads_table();
 

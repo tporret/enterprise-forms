@@ -8,13 +8,16 @@ class NotificationService {
 	private const SCHEMA_META_KEY = 'ep_form_schema';
 
 	/**
-	 * @return array{enabled: bool, recipients: string, included_field_ids: string[]|null}
+	 * @return array{enabled: bool, recipients: string, included_field_ids: string[]|null, include_plaintext_fields: bool, include_sensitive_fields: bool, attach_files: bool}
 	 */
 	public function get_form_notification_settings( int $form_id ): array {
 		$defaults = [
-			'enabled'            => true,
-			'recipients'         => '',
-			'included_field_ids' => null,
+			'enabled'                  => true,
+			'recipients'               => '',
+			'included_field_ids'       => null,
+			'include_plaintext_fields' => false,
+			'include_sensitive_fields' => false,
+			'attach_files'             => false,
 		];
 
 		$schema_raw = get_post_meta( $form_id, self::SCHEMA_META_KEY, true );
@@ -54,9 +57,12 @@ class NotificationService {
 		}
 
 		return [
-			'enabled'            => $enabled,
-			'recipients'         => $recipients,
-			'included_field_ids' => $included_field_ids,
+			'enabled'                  => $enabled,
+			'recipients'               => $recipients,
+			'included_field_ids'       => $included_field_ids,
+			'include_plaintext_fields' => ! empty( $notification['include_plaintext_fields'] ),
+			'include_sensitive_fields' => ! empty( $notification['include_sensitive_fields'] ),
+			'attach_files'             => ! empty( $notification['attach_files'] ),
 		];
 	}
 
@@ -214,9 +220,12 @@ class NotificationService {
 			sprintf( 'Form: %s', $form_title ),
 			sprintf( 'Submitted At: %s', $local_timestamp ),
 			sprintf( 'Entry UUID: %s', sanitize_text_field( $entry_uuid ) ),
+			sprintf( 'Entry Link: %s', esc_url_raw( admin_url( 'admin.php?page=enterprise-forms#/entries/' . $form_id ) ) ),
 		];
 
-		$field_lines = ! empty( $payload ) ? $this->build_field_data_lines( $form_id, $payload, $included_field_ids ) : [];
+		$field_lines = ( ! empty( $payload ) && $settings['include_plaintext_fields'] )
+			? $this->build_field_data_lines( $form_id, $payload, $included_field_ids, $settings['include_sensitive_fields'] )
+			: [];
 
 		if ( ! empty( $field_lines ) ) {
 			$message_lines[] = '';
@@ -227,7 +236,7 @@ class NotificationService {
 		}
 
 		$headers = [ 'Content-Type: text/plain; charset=UTF-8' ];
-		$attachments = $this->get_payload_attachment_paths( $payload );
+		$attachments = $settings['attach_files'] ? $this->get_payload_attachment_paths( $payload ) : [];
 
 		return wp_mail( $recipients, $subject, implode( "\n", $message_lines ), $headers, $attachments );
 	}
@@ -293,7 +302,7 @@ class NotificationService {
 	 * @param string[]|null        $included_field_ids null = all eligible fields
 	 * @return string[]
 	 */
-	private function build_field_data_lines( int $form_id, array $payload, ?array $included_field_ids ): array {
+	private function build_field_data_lines( int $form_id, array $payload, ?array $included_field_ids, bool $include_sensitive_fields ): array {
 		$schema_raw = get_post_meta( $form_id, self::SCHEMA_META_KEY, true );
 		$schema     = is_string( $schema_raw ) ? json_decode( $schema_raw, true ) : null;
 		$fields     = is_array( $schema ) && isset( $schema['fields'] ) && is_array( $schema['fields'] )
@@ -328,10 +337,26 @@ class NotificationService {
 				continue;
 			}
 
-			$lines[] = sprintf( '%s: %s', $field_label, $this->format_field_value( $payload[ $field_name ] ) );
+			$value = $this->is_sensitive_field( $field ) && ! $include_sensitive_fields
+				? '[redacted]'
+				: $this->format_field_value( $payload[ $field_name ] );
+
+			$lines[] = sprintf( '%s: %s', $field_label, $value );
 		}
 
 		return $lines;
+	}
+
+	/**
+	 * @param array<string, mixed> $field
+	 */
+	private function is_sensitive_field( array $field ): bool {
+		$field_type = sanitize_key( (string) ( $field['type'] ?? '' ) );
+		$rules = isset( $field['validation_rules'] ) && is_array( $field['validation_rules'] ) ? $field['validation_rules'] : [];
+
+		return ! empty( $field['sensitive'] )
+			|| ! empty( $rules['sensitive'] )
+			|| in_array( $field_type, [ 'file', 'password', 'payment', 'hidden' ], true );
 	}
 
 	/**
