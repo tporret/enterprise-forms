@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enterprise Forms Schema",
+  "description": "JSON-based schema for forms supporting nested conditional logic and multi-step pagination.",
+  "type": "object",
+  "required": ["id", "title", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique form identifier."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable form title."
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string", "default": "chameleon" },
+        "submitButtonText": { "type": "string", "default": "Submit" },
+        "successMessage": { "type": "string", "default": "Thank you for your submission." },
+        "enableHoneypot": { "type": "boolean", "default": true },
+        "enableEncryption": { "type": "boolean", "default": false },
+        "notificationEmail": { "type": "string", "format": "email" },
+        "notification": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "recipients": {
+              "type": "string",
+              "description": "Comma-separated list of recipient user emails. Falls back to WordPress admin email when empty."
+            },
+            "included_field_ids": {
+              "type": [ "array", "null" ],
+              "items": { "type": "string" },
+              "description": "Field IDs to include in email notifications. Null means all eligible fields."
+            }
+          }
+        }
+      }
+    },
+    "requires_payment": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the schema contains a payment field."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Multi-step pagination. Each step is a page/section of the form.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/Step"
+      }
+    }
+  },
+  "definitions": {
+    "Step": {
+      "type": "object",
+      "required": ["id", "fields"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Field" }
+        }
+      }
+    },
+    "Field": {
+      "type": "object",
+      "required": ["id", "type", "label"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique field identifier."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "textarea",
+            "email",
+            "number",
+            "phone",
+            "url",
+            "select",
+            "radio",
+            "checkbox",
+            "file",
+            "date",
+            "time",
+            "hidden",
+            "payment",
+            "html"
+          ]
+        },
+        "label": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "required": { "type": "boolean", "default": false },
+        "defaultValue": {},
+        "options": {
+          "type": "array",
+          "description": "Choices for select, radio, checkbox fields.",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "validation": {
+          "$ref": "#/definitions/ValidationRules"
+        },
+        "conditionalLogic": {
+          "$ref": "#/definitions/ConditionalLogic"
+        },
+        "gateway": { "type": "string", "enum": ["stripe"] },
+        "amount_source": { "type": "string", "enum": ["static", "field"] },
+        "amount": { "type": "string" },
+        "amount_field": { "type": "string" },
+        "currency": { "type": "string" },
+        "description": { "type": "string" },
+        "enable_wallets": { "type": "boolean" }
+      }
+    },
+    "ValidationRules": {
+      "type": "object",
+      "properties": {
+        "minLength": { "type": "integer" },
+        "maxLength": { "type": "integer" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "pattern": { "type": "string", "description": "Regex pattern for custom validation." },
+        "customMessage": { "type": "string" },
+        "allowedFileTypes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "maxFileSize": {
+          "type": "integer",
+          "description": "Max file size in bytes."
+        }
+      }
+    },
+    "ConditionalLogic": {
+      "type": "object",
+      "description": "Nested conditional logic for field visibility and behavior.",
+      "required": ["action", "logicType", "rules"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["show", "hide", "require", "disable"],
+          "description": "What happens when rules match."
+        },
+        "logicType": {
+          "type": "string",
+          "enum": ["all", "any"],
+          "description": "'all' = AND logic, 'any' = OR logic."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConditionalRule"
+          }
+        }
+      }
+    },
+    "ConditionalRule": {
+      "type": "object",
+      "required": ["fieldId", "operator", "value"],
+      "properties": {
+        "fieldId": {
+          "type": "string",
+          "description": "ID of the field to evaluate."
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["equals", "not_equals", "contains", "not_contains", "greater_than", "less_than", "is_empty", "is_not_empty"]
+        },
+        "value": {},
+        "nestedRules": {
+          "type": "array",
+          "description": "Allows nesting conditional groups for complex logic.",
+          "items": {
+            "$ref": "#/definitions/ConditionalLogic"
+          }
+        }
+      }
+    }
+  }
+}

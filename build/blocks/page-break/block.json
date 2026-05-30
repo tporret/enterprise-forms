@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schemas.wp.org/wp/6.1/block.json",
+  "apiVersion": 3,
+  "name": "ep/page-break",
+  "version": "1.0.0",
+  "title": "Page Break",
+  "category": "enterprise-forms",
+  "icon": "images-alt2",
+  "description": "Divides a form into multiple steps or pages.",
+  "supports": {
+    "reusable": false,
+    "html": false,
+    "lock": false
+  },
+  "attributes": {
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "description": {
+      "type": "string",
+      "default": ""
+    },
+    "pageNumber": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "textdomain": "enterprise-forms"
+}

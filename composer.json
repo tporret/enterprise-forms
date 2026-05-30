@@ -1,0 +1,20 @@
+{
+  "name": "enterprise-forms/enterprise-forms",
+  "description": "Disruptive, enterprise-grade WordPress form plugin featuring a full-screen React workstation.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+	"braintree/braintree_php": "^6.21",
+    "php": ">=8.2.0",
+    "stripe/stripe-php": "^16.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "EnterpriseForms\\": "inc/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+#enterprise-forms-root {
+    min-height: 100vh;
+    font-family: "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+.ef-snackbar-list {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    left: auto;
+    z-index: 100000;
+}
+
+.ef-builder-canvas .block-editor-block-list__layout {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.ef-builder-canvas .block-editor-block-list__block.is-selected .ef-field-card {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}

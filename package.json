@@ -1,0 +1,38 @@
+{
+  "name": "enterprise-forms",
+  "version": "1.0.0",
+  "description": "A comprehensive WordPress forms plugin with full-screen React UI and native interactivity.",
+  "main": "build/index.js",
+  "scripts": {
+    "start": "wp-scripts start",
+    "build": "wp-scripts build",
+    "lint:css": "wp-scripts lint-style",
+    "lint:js": "wp-scripts lint-js",
+    "format": "wp-scripts format"
+  },
+  "author": "Enterprise Forms",
+  "license": "GPL-2.0-or-later",
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.10.8",
+    "@wordpress/api-fetch": "^7.0.0",
+    "@wordpress/block-editor": "^12.0.0",
+    "@wordpress/blocks": "^13.0.0",
+    "@wordpress/components": "^28.0.0",
+    "@wordpress/data": "^10.0.0",
+    "@wordpress/dataviews": "^1.0.0",
+    "@wordpress/element": "^6.0.0",
+    "@wordpress/i18n": "^5.0.0",
+    "@wordpress/interactivity": "^2.0.0",
+    "react-router-dom": "^6.30.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@wordpress/scripts": "^27.0.0",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.0.0"
+  }
+}

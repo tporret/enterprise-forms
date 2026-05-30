@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "enterprise-forms/renderer",
+  "title": "Enterprise Form",
+  "category": "widgets",
+  "icon": "feedback",
+  "description": "Render a high-performance form using WP Interactivity API.",
+  "supports": {
+    "html": false,
+    "interactivity": true
+  },
+  "attributes": {
+    "formId": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "textdomain": "enterprise-forms",
+  "editorScript": "file:./index.js",
+  "editorStyle": "file:./index.css",
+  "viewScriptModule": "file:./view.js",
+  "render": "file:./view.php"
+}

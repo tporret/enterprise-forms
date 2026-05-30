@@ -1,0 +1,276 @@
+.ep-form-container {
+	box-sizing: border-box;
+	font-family: var(--ep-font-family, inherit);
+	font-size: var(--ep-font-size, 1rem);
+	line-height: 1.5;
+	color: var(--ep-text, inherit);
+	background: var(--ep-bg, transparent);
+	border: var(--ep-border-width, 1px) solid var(--ep-border-color, currentColor);
+	border-radius: var(--ep-border-radius, 0.5rem);
+	padding: var(--ep-container-padding, 1rem);
+	box-shadow: var(--ep-shadow, none);
+}
+
+.ep-form-container *,
+.ep-form-container *::before,
+.ep-form-container *::after {
+	box-sizing: inherit;
+}
+
+.ep-form-container .ep-form {
+	display: grid;
+	gap: var(--ep-field-gap, 0.875rem);
+	transition: opacity 0.35s ease;
+}
+
+.ep-form-container .ep-form.ep-is-gone {
+	opacity: 0;
+	pointer-events: none;
+	animation: ep-collapse 0s 0.35s forwards;
+}
+
+.ep-form-container .ep-field-wrapper,
+.ep-form-container .ep-form-row {
+	display: grid;
+	gap: calc(var(--ep-field-gap, 0.875rem) * 0.45);
+	margin: 0;
+}
+
+.ep-form-container label,
+.ep-form-container .ep-label,
+.ep-form-container legend {
+	display: inline-block;
+	margin: 0;
+	color: var(--ep-text, inherit);
+	font-family: var(--ep-font-family, inherit);
+	font-size: var(--ep-label-size, 0.9375rem);
+	font-weight: var(--ep-label-weight, 600);
+	line-height: 1.4;
+}
+
+.ep-form-container input,
+.ep-form-container select,
+.ep-form-container textarea,
+.ep-form-container button {
+	font: inherit;
+	color: inherit;
+}
+
+.ep-form-container input,
+.ep-form-container select,
+.ep-form-container textarea {
+	font-weight: var(--ep-input-font-weight, 400);
+}
+
+.ep-form-container input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']),
+.ep-form-container input[type='file'],
+.ep-form-container select,
+.ep-form-container textarea {
+	width: 100%;
+	min-height: 2.875rem;
+	padding: var(--ep-control-padding, var(--ep-spacing, 0.75rem 0.875rem));
+	color: var(--ep-input-text, var(--ep-text, inherit));
+	background: var(--ep-input-bg, transparent);
+	border: var(--ep-border-width, 1px) solid var(--ep-input-border, var(--ep-border-color, currentColor));
+	border-radius: calc(var(--ep-border-radius, 0.5rem) - 2px);
+	box-shadow: inset 0 0 0 1px transparent;
+	transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.ep-form-container textarea {
+	min-height: 8rem;
+	resize: vertical;
+}
+
+.ep-form-container input[type='checkbox'],
+.ep-form-container input[type='radio'] {
+	accent-color: var(--ep-primary-color, currentColor);
+}
+
+.ep-form-container input:focus,
+.ep-form-container select:focus,
+.ep-form-container textarea:focus,
+.ep-form-container button:focus {
+	outline: var(--ep-focus-ring, none);
+	outline-offset: 0;
+	border-color: var(--ep-focus-border-color, var(--ep-primary-color, currentColor));
+	box-shadow: var(--ep-focus-shadow, 0 0 0 3px transparent);
+}
+
+.ep-form-container ::placeholder {
+	color: var(--ep-muted-text, currentColor);
+	opacity: 0.85;
+}
+
+.ep-form-container .ep-choice-group {
+	border: 0;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: calc(var(--ep-field-gap, 0.875rem) * 0.5);
+}
+
+.ep-form-container .ep-choice {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.625rem;
+	color: var(--ep-text, inherit);
+	line-height: 1.4;
+	cursor: pointer;
+}
+
+.ep-form-container button[type='submit'],
+.ep-form-container .ep-submit-button {
+	appearance: none;
+	justify-self: start;
+	padding: var(--ep-submit-padding-y, 0.875rem) var(--ep-submit-padding-x, 1.25rem);
+	border: var(--ep-border-width, 1px) solid transparent;
+	border-radius: calc(var(--ep-border-radius, 0.5rem) + 2px);
+	background: var(--ep-button-bg, var(--ep-primary-color, currentColor));
+	color: var(--ep-button-text, #fff);
+	font-weight: 600;
+	line-height: 1.2;
+	cursor: pointer;
+	transition: transform 0.18s ease, background-color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+	box-shadow: none;
+}
+
+.ep-form-container button[type='submit']:hover:enabled,
+.ep-form-container .ep-submit-button:hover:enabled {
+	background: var(--ep-button-hover-bg, var(--ep-button-bg, var(--ep-primary-color, currentColor)));
+	transform: translateY(-1px);
+}
+
+.ep-form-container button[type='submit']:disabled,
+.ep-form-container .ep-submit-button:disabled {
+	opacity: 0.72;
+	cursor: not-allowed;
+	transform: none;
+}
+
+.ep-form-container .ep-submit-button.is-submitting {
+	position: relative;
+	padding-right: calc(var(--ep-submit-padding-x, 1.25rem) + 1.25rem);
+}
+
+.ep-form-container .ep-submit-button.is-submitting::after {
+	content: '';
+	position: absolute;
+	right: 0.95rem;
+	top: 50%;
+	width: 0.95rem;
+	height: 0.95rem;
+	margin-top: -0.475rem;
+	border: 2px solid color-mix(in srgb, var(--ep-button-text, #fff) 35%, transparent);
+	border-top-color: var(--ep-button-text, #fff);
+	border-radius: 999px;
+	animation: ep-spin 0.8s linear infinite;
+}
+
+.ep-form-container .ep-error {
+	border-color: var(--ep-error-color, currentColor) !important;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ep-error-color, currentColor) 16%, transparent);
+	animation: ep-shake 0.24s ease-in-out;
+}
+
+.ep-form-container .ep-error-message {
+	margin: 0;
+	min-height: 1rem;
+	color: var(--ep-error-color, currentColor);
+	font-size: 0.825rem;
+	line-height: 1.35;
+}
+
+.ep-form-container .ep-form-message {
+	margin: 0;
+	font-size: 0.95rem;
+	line-height: 1.45;
+}
+
+.ep-form-container .ep-form-message-error {
+	color: var(--ep-error-color, currentColor);
+}
+
+.ep-form-container .ep-success-message {
+	display: none;
+	padding: var(--ep-spacing, 1rem);
+	border: var(--ep-border-width, 1px) solid color-mix(in srgb, var(--ep-success-color, var(--ep-primary-color, currentColor)) 38%, transparent);
+	border-radius: var(--ep-border-radius, 0.5rem);
+	background: var(--ep-success-bg, transparent);
+	color: var(--ep-success-color, inherit);
+	font-size: 1rem;
+	line-height: 1.5;
+	text-align: center;
+	opacity: 0;
+}
+
+.ep-form-container .ep-success-message.ep-is-visible {
+	display: block;
+	animation: ep-success-fade-in 0.4s ease 0.3s forwards;
+}
+
+.ep-form-container .ep-form-row-hidden {
+	position: absolute;
+	left: -10000px;
+	height: 0;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+
+@keyframes ep-collapse {
+	to {
+		height: 0;
+		overflow: hidden;
+		margin: 0;
+		padding: 0;
+	}
+}
+
+@keyframes ep-success-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes ep-shake {
+	0% {
+		transform: translateX(0);
+	}
+
+	30% {
+		transform: translateX(-3px);
+	}
+
+	60% {
+		transform: translateX(3px);
+	}
+
+	100% {
+		transform: translateX(0);
+	}
+}
+
+@keyframes ep-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (max-width: 640px) {
+	.ep-form-container {
+		padding: calc(var(--ep-spacing, 1rem) * 0.9);
+	}
+
+	.ep-form-container button[type='submit'],
+	.ep-form-container .ep-submit-button {
+		width: 100%;
+		justify-self: stretch;
+	}
+}
