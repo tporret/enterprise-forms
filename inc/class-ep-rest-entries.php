@@ -82,8 +82,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 	public function create_item_permissions_check( $request ): bool|WP_Error {
 		$correlation_id = Observability::correlation_id();
 		$form_id = absint( $request['form_id'] ?? 0 );
+		$security_settings = $this->get_submission_security_settings( $form_id );
 		$honeypot = sanitize_text_field( (string) $request->get_param( 'hp_field' ) );
-		if ( '' !== $honeypot ) {
+		if ( $security_settings['enable_honeypot'] && '' !== $honeypot ) {
 			Observability::increment_metric( 'spam_blocks' );
 			return new WP_Error(
 				'ep_forms_spam_detected',
@@ -102,7 +103,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$rate_limited = $this->check_rate_limit( $form_id );
+		$rate_limited = $this->check_rate_limit( $form_id, $security_settings );
 		if ( is_wp_error( $rate_limited ) ) {
 			Observability::increment_metric( 'rate_limit_blocks' );
 			Observability::log( 'warning', 'submission_rate_limited', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id ] );
@@ -186,8 +187,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		$validation['sanitized'] = $payment_sanitized;
+		$security_settings = $this->get_submission_security_settings( $form_id );
 
-		$duplicate_check = $this->check_duplicate_submission( $form_id, $validation['sanitized'] );
+		$duplicate_check = $this->check_duplicate_submission( $form_id, $validation['sanitized'], $security_settings['duplicate_submission_window'] );
 		if ( is_wp_error( $duplicate_check ) ) {
 			return $duplicate_check;
 		}
@@ -265,7 +267,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$this->mark_submission_fingerprint( $form_id, $validation['sanitized'] );
+		$this->mark_submission_fingerprint( $form_id, $validation['sanitized'], $security_settings['duplicate_submission_window'] );
 		$this->attach_uploaded_file_references( $form_id, $uuid, $validation['sanitized'] );
 		$this->attach_payment_record( $uuid, $validation['sanitized'] );
 
@@ -382,9 +384,12 @@ class EP_REST_Entries extends WP_REST_Controller {
 		return true;
 	}
 
-	private function check_rate_limit( int $form_id ): bool|WP_Error {
-		$limit = (int) apply_filters( 'ep_forms_submission_rate_limit', 10, $form_id );
-		$window = (int) apply_filters( 'ep_forms_submission_rate_window', MINUTE_IN_SECONDS, $form_id );
+	/**
+	 * @param array{enable_honeypot: bool, submission_rate_limit: int, submission_rate_window: int, duplicate_submission_window: int} $security_settings
+	 */
+	private function check_rate_limit( int $form_id, array $security_settings ): bool|WP_Error {
+		$limit = (int) $security_settings['submission_rate_limit'];
+		$window = (int) $security_settings['submission_rate_window'];
 
 		if ( $limit < 1 || $window < 1 ) {
 			return true;
@@ -408,7 +413,11 @@ class EP_REST_Entries extends WP_REST_Controller {
 	/**
 	 * @param array<string, mixed> $payload
 	 */
-	private function check_duplicate_submission( int $form_id, array $payload ): bool|WP_Error {
+	private function check_duplicate_submission( int $form_id, array $payload, int $window ): bool|WP_Error {
+		if ( $window < 1 ) {
+			return true;
+		}
+
 		$key = $this->submission_fingerprint_key( $form_id, $payload );
 		if ( get_transient( $key ) ) {
 			return new WP_Error(
@@ -424,8 +433,60 @@ class EP_REST_Entries extends WP_REST_Controller {
 	/**
 	 * @param array<string, mixed> $payload
 	 */
-	private function mark_submission_fingerprint( int $form_id, array $payload ): void {
-		set_transient( $this->submission_fingerprint_key( $form_id, $payload ), 1, 5 * MINUTE_IN_SECONDS );
+	private function mark_submission_fingerprint( int $form_id, array $payload, int $window ): void {
+		if ( $window < 1 ) {
+			return;
+		}
+
+		set_transient( $this->submission_fingerprint_key( $form_id, $payload ), 1, $window );
+	}
+
+	/**
+	 * @return array{enable_honeypot: bool, submission_rate_limit: int, submission_rate_window: int, duplicate_submission_window: int}
+	 */
+	private function get_submission_security_settings( int $form_id ): array {
+		$settings = [
+			'enable_honeypot' => true,
+			'submission_rate_limit' => 10,
+			'submission_rate_window' => MINUTE_IN_SECONDS,
+			'duplicate_submission_window' => 5 * MINUTE_IN_SECONDS,
+		];
+
+		if ( $form_id > 0 ) {
+			$schema_raw = get_post_meta( $form_id, 'ep_form_schema', true );
+			$schema = is_string( $schema_raw ) ? json_decode( $schema_raw, true ) : null;
+			if ( is_array( $schema ) ) {
+				$schema_settings = isset( $schema['settings'] ) && is_array( $schema['settings'] ) ? $schema['settings'] : [];
+				$spam_settings = isset( $schema_settings['spam_prevention'] ) && is_array( $schema_settings['spam_prevention'] )
+					? $schema_settings['spam_prevention']
+					: [];
+
+				if ( array_key_exists( 'enable_honeypot', $spam_settings ) ) {
+					$settings['enable_honeypot'] = (bool) $spam_settings['enable_honeypot'];
+				} elseif ( array_key_exists( 'enableHoneypot', $schema_settings ) ) {
+					$settings['enable_honeypot'] = (bool) $schema_settings['enableHoneypot'];
+				}
+
+				if ( array_key_exists( 'submission_rate_limit', $spam_settings ) ) {
+					$settings['submission_rate_limit'] = max( 0, absint( $spam_settings['submission_rate_limit'] ) );
+				}
+
+				if ( array_key_exists( 'submission_rate_window', $spam_settings ) ) {
+					$settings['submission_rate_window'] = max( 0, absint( $spam_settings['submission_rate_window'] ) );
+				}
+
+				if ( array_key_exists( 'duplicate_submission_window', $spam_settings ) ) {
+					$settings['duplicate_submission_window'] = max( 0, absint( $spam_settings['duplicate_submission_window'] ) );
+				}
+			}
+		}
+
+		$settings['enable_honeypot'] = (bool) apply_filters( 'ep_forms_honeypot_enabled', $settings['enable_honeypot'], $form_id, $settings );
+		$settings['submission_rate_limit'] = max( 0, (int) apply_filters( 'ep_forms_submission_rate_limit', $settings['submission_rate_limit'], $form_id ) );
+		$settings['submission_rate_window'] = max( 0, (int) apply_filters( 'ep_forms_submission_rate_window', $settings['submission_rate_window'], $form_id ) );
+		$settings['duplicate_submission_window'] = max( 0, (int) apply_filters( 'ep_forms_duplicate_submission_window', $settings['duplicate_submission_window'], $form_id ) );
+
+		return $settings;
 	}
 
 	/**

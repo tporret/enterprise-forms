@@ -54,9 +54,17 @@ export interface NotificationSettings {
 	included_field_ids: string[] | null; // null = all eligible fields
 }
 
+export interface SpamPreventionSettings {
+	enable_honeypot: boolean;
+	submission_rate_limit: number;
+	submission_rate_window: number;
+	duplicate_submission_window: number;
+}
+
 export interface FormSettings {
 	theme: string;
 	notification: NotificationSettings;
+	spam_prevention: SpamPreventionSettings;
 }
 
 export interface FormSchema {
@@ -79,6 +87,12 @@ export const createEmptySchema = (): FormSchema => ( {
 			enabled: true,
 			recipients: '',
 			included_field_ids: null,
+		},
+		spam_prevention: {
+			enable_honeypot: true,
+			submission_rate_limit: 10,
+			submission_rate_window: 60,
+			duplicate_submission_window: 300,
 		},
 	},
 } );

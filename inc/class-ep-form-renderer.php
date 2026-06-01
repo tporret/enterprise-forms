@@ -13,6 +13,7 @@ class EP_Form_Renderer {
 		$pages = $this->extract_pages( $schema );
 		$is_multi_step = count( $pages ) > 1;
 		$has_submit = false;
+		$honeypot_enabled = $this->is_honeypot_enabled( $schema );
 
 		foreach ( $fields as $field ) {
 			if ( is_array( $field ) && sanitize_key( (string) ( $field['type'] ?? '' ) ) === 'submit' ) {
@@ -92,19 +93,21 @@ class EP_Form_Renderer {
 				<?php endforeach; ?>
 			<?php endif; ?>
 
-			<div class="ep-form-row ep-form-row-hidden" aria-hidden="true">
-				<input
-					type="text"
-					class="ep-honeypot"
-					name="hp_field"
-					tabindex="-1"
-					autocomplete="off"
-					data-ep-field="hp_field"
-					data-wp-bind--value="context.values.hp_field"
-					data-wp-on--input="actions.updateValue"
-					data-wp-class--ep-error="context.errors.hp_field"
-				/>
-			</div>
+			<?php if ( $honeypot_enabled ) : ?>
+				<div class="ep-form-row ep-form-row-hidden" aria-hidden="true">
+					<input
+						type="text"
+						class="ep-honeypot"
+						name="hp_field"
+						tabindex="-1"
+						autocomplete="off"
+						data-ep-field="hp_field"
+						data-wp-bind--value="context.values.hp_field"
+						data-wp-on--input="actions.updateValue"
+						data-wp-class--ep-error="context.errors.hp_field"
+					/>
+				</div>
+			<?php endif; ?>
 
 			<input type="hidden" name="form_id" value="<?php echo esc_attr( (string) $form_id ); ?>" />
 			<input
@@ -233,6 +236,26 @@ class EP_Form_Renderer {
 
 	private function submission_token_key( string $token ): string {
 		return 'ep_submit_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $schema
+	 */
+	private function is_honeypot_enabled( array $schema ): bool {
+		$settings = isset( $schema['settings'] ) && is_array( $schema['settings'] ) ? $schema['settings'] : [];
+		$spam_settings = isset( $settings['spam_prevention'] ) && is_array( $settings['spam_prevention'] )
+			? $settings['spam_prevention']
+			: [];
+
+		if ( array_key_exists( 'enable_honeypot', $spam_settings ) ) {
+			return (bool) $spam_settings['enable_honeypot'];
+		}
+
+		if ( array_key_exists( 'enableHoneypot', $settings ) ) {
+			return (bool) $settings['enableHoneypot'];
+		}
+
+		return true;
 	}
 
 	/**

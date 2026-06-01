@@ -9,6 +9,7 @@ import Canvas from '../builder/Canvas';
 import { epFormRegistry } from '../builder/epFormRegistry';
 import { LogicBuilder } from '../builder/LogicBuilder';
 import NotificationSettingsPanel from '../builder/NotificationSettingsPanel';
+import SpamPreventionSettingsPanel from '../builder/SpamPreventionSettingsPanel';
 import SettingsSidebar from '../builder/SettingsSidebar';
 import ThemeSettingsPanel from '../builder/ThemeSettingsPanel';
 import { useBuilderState, type BuilderSaveState } from '../builder/useBuilderState';
@@ -61,12 +62,26 @@ interface ParsedSchema {
 	} >;
 	settings?: {
 		theme?: string;
+		enableHoneypot?: boolean;
 		notification?: {
 			enabled?: boolean;
 			recipients?: string;
 			included_field_ids?: string[] | null;
 		};
+		spam_prevention?: {
+			enable_honeypot?: boolean;
+			submission_rate_limit?: number;
+			submission_rate_window?: number;
+			duplicate_submission_window?: number;
+		};
 	};
+}
+
+interface SpamPreventionSettings {
+	enable_honeypot: boolean;
+	submission_rate_limit: number;
+	submission_rate_window: number;
+	duplicate_submission_window: number;
 }
 
 interface WpFormSchemaResponse {
@@ -351,6 +366,44 @@ const getThemeFromSchema = ( schemaRaw: string ): string => {
 	}
 };
 
+const clampInt = ( value: number, min: number, max: number ): number => {
+	if ( Number.isNaN( value ) ) {
+		return min;
+	}
+
+	return Math.min( max, Math.max( min, Math.round( value ) ) );
+};
+
+const getSpamPreventionSettingsFromSchema = ( schemaRaw: string ): SpamPreventionSettings => {
+	const defaults: SpamPreventionSettings = {
+		enable_honeypot: true,
+		submission_rate_limit: 10,
+		submission_rate_window: 60,
+		duplicate_submission_window: 300,
+	};
+
+	if ( ! schemaRaw ) {
+		return defaults;
+	}
+
+	try {
+		const parsed = JSON.parse( schemaRaw ) as ParsedSchema;
+		const legacyEnableHoneypot = typeof parsed.settings?.enableHoneypot === 'boolean'
+			? parsed.settings.enableHoneypot
+			: defaults.enable_honeypot;
+		const spam = parsed.settings?.spam_prevention;
+
+		return {
+			enable_honeypot: typeof spam?.enable_honeypot === 'boolean' ? spam.enable_honeypot : legacyEnableHoneypot,
+			submission_rate_limit: clampInt( Number( spam?.submission_rate_limit ?? defaults.submission_rate_limit ), 1, 1000 ),
+			submission_rate_window: clampInt( Number( spam?.submission_rate_window ?? defaults.submission_rate_window ), 1, 86400 ),
+			duplicate_submission_window: clampInt( Number( spam?.duplicate_submission_window ?? defaults.duplicate_submission_window ), 1, 86400 ),
+		};
+	} catch {
+		return defaults;
+	}
+};
+
 const getRequiresPaymentFromSchema = ( schemaRaw: string ): boolean => {
 	if ( ! schemaRaw ) {
 		return false;
@@ -457,6 +510,7 @@ const Builder = (): JSX.Element => {
 				}
 				const schemaRaw = form.meta?.ep_form_schema ?? selectedForm?.metaSchemaRaw ?? '';
 				const notificationSettings = getNotificationSettingsFromSchema( schemaRaw );
+				const spamPreventionSettings = getSpamPreventionSettingsFromSchema( schemaRaw );
 				const theme = getThemeFromSchema( schemaRaw );
 				setSchema( {
 					schema_version: '1.0.0',
@@ -467,6 +521,7 @@ const Builder = (): JSX.Element => {
 					settings: {
 						theme,
 						notification: notificationSettings,
+						spam_prevention: spamPreventionSettings,
 					},
 				} );
 				setBlocks( createBlocksFromSchema( schemaRaw ) );
@@ -478,6 +533,7 @@ const Builder = (): JSX.Element => {
 				}
 				const fallbackSchemaRaw = selectedForm?.metaSchemaRaw ?? '';
 				const notificationSettings = getNotificationSettingsFromSchema( fallbackSchemaRaw );
+				const spamPreventionSettings = getSpamPreventionSettingsFromSchema( fallbackSchemaRaw );
 				const theme = getThemeFromSchema( fallbackSchemaRaw );
 				setSchema( {
 					schema_version: '1.0.0',
@@ -488,6 +544,7 @@ const Builder = (): JSX.Element => {
 					settings: {
 						theme,
 						notification: notificationSettings,
+						spam_prevention: spamPreventionSettings,
 					},
 				} );
 				setBlocks( createBlocksFromSchema( fallbackSchemaRaw ) );
@@ -589,6 +646,7 @@ const Builder = (): JSX.Element => {
 									onChange={ ( logic ) => setSchema( { ...builderSchema, logic } ) }
 								/>
 							<NotificationSettingsPanel />
+							<SpamPreventionSettingsPanel />
 								<ThemeSettingsPanel />
 							</div>
 						</div>

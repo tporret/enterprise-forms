@@ -15,6 +15,7 @@ It is designed for teams that want native WordPress primitives on the backend, a
 - Native payment checkout with Stripe, Braintree, PayPal, and Square adapters.
 - Encrypted payment credential storage with public client config exposure only where required.
 - Per-form notification settings with admin-email fallback.
+- Per-form spam prevention settings for honeypot, rate limiting, and duplicate lock windows.
 - Themeable frontend output with included `chameleon` and `itsm` themes.
 - Custom `ep_form` post type with REST support.
 
@@ -92,7 +93,7 @@ npm run format
 
 1. Create a new form from the dashboard.
 2. Build the schema in the workstation using the included field blocks.
-3. Configure form theme and notification settings.
+3. Configure form theme, notification settings, and spam prevention settings.
 4. Configure the selected gateway under **Settings > Payments** when the form needs checkout.
 5. Add the Payment Checkout block.
 6. Save the form schema to `ep_form_schema` post meta.
@@ -139,6 +140,38 @@ Payment security rules:
 - Unclaimed payment records keep a `NULL` transaction ID so multiple checkout attempts can exist safely, while claimed transactions remain unique per gateway to prevent replay.
 - A payment-required submission is rejected unless the selected gateway confirms payment success.
 - Stored entry payloads include payment metadata such as gateway, transaction ID, amount, currency, and receipt URL when available.
+
+## Spam Prevention
+
+Enterprise Forms includes layered submission protection and now exposes per-form tuning controls in the builder.
+
+Builder controls:
+
+- Enable or disable the honeypot trap field.
+- Set submission rate limit count.
+- Set submission rate limit window in seconds.
+- Set duplicate submission lock window in seconds.
+
+Default values for new and existing forms:
+
+- Honeypot enabled: `true`
+- Submission rate limit: `10`
+- Submission rate window: `60` seconds
+- Duplicate lock window: `300` seconds
+
+Runtime behavior:
+
+- Honeypot checks only run when enabled for the form.
+- Rate limiting is applied per form and request fingerprint.
+- Duplicate submission blocking uses the configured lock window.
+- Public nonce and submission-token replay protection remain enforced.
+
+Developer hooks:
+
+- `ep_forms_honeypot_enabled`
+- `ep_forms_submission_rate_limit`
+- `ep_forms_submission_rate_window`
+- `ep_forms_duplicate_submission_window`
 
 ## Architecture Overview
 

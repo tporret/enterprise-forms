@@ -24,6 +24,14 @@ const sanitizeText = ( value: string ): string => {
 	return value.replace( /<[^>]*>/g, '' ).trim();
 };
 
+const clampInt = ( value: number, min: number, max: number ): number => {
+	if ( Number.isNaN( value ) ) {
+		return min;
+	}
+
+	return Math.min( max, Math.max( min, Math.round( value ) ) );
+};
+
 const sanitizeSchemaPayload = ( schema: FormSchema ): FormSchema => {
 	return {
 		schema_version: '1.0.0',
@@ -104,6 +112,12 @@ const sanitizeSchemaPayload = ( schema: FormSchema ): FormSchema => {
 						.map( ( id ) => sanitizeText( id ) )
 						.filter( Boolean )
 					: null,
+			},
+			spam_prevention: {
+				enable_honeypot: Boolean( schema.settings.spam_prevention?.enable_honeypot ?? true ),
+				submission_rate_limit: clampInt( Number( schema.settings.spam_prevention?.submission_rate_limit ?? 10 ), 1, 1000 ),
+				submission_rate_window: clampInt( Number( schema.settings.spam_prevention?.submission_rate_window ?? 60 ), 1, 86400 ),
+				duplicate_submission_window: clampInt( Number( schema.settings.spam_prevention?.duplicate_submission_window ?? 300 ), 1, 86400 ),
 			},
 		},
 	};

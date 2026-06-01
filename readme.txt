@@ -25,8 +25,22 @@ Use it to create forms, publish them with a block, collect submissions through c
 * Payment Checkout block with Stripe, Braintree, PayPal, and Square support.
 * Encrypted payment credential storage with secret values hidden from settings responses.
 * Per-form notification controls with fallback to the site admin email.
+* Per-form spam prevention controls for honeypot, rate limiting, and duplicate lock windows.
 * Built-in frontend themes for different presentation styles.
 * Entry viewing screen for submitted data.
+
+= Spam prevention =
+
+Enterprise Forms protects public submissions with a honeypot trap field, public nonce verification, one-time submission tokens, request fingerprint rate limiting, and duplicate submission suppression.
+
+The builder now includes per-form controls for:
+
+* Honeypot enabled or disabled.
+* Submission rate limit count.
+* Submission rate limit window in seconds.
+* Duplicate submission lock window in seconds.
+
+Default values are honeypot enabled, 10 submissions, 60-second rate window, and 300-second duplicate lock window.
 
 = Included field types =
 
@@ -110,7 +124,17 @@ No secret credentials are returned to the browser. The frontend only receives pu
 
 Entry viewing is restricted to privileged users in wp-admin.
 
+= Can I tune spam controls per form? =
+
+Yes. In the form builder, open the Spam Prevention panel to adjust honeypot behavior, rate-limit values, and duplicate lock timing for that form.
+
 == Changelog ==
+
+= 1.0.2 =
+
+* Added Spam Prevention builder settings for per-form honeypot, rate limit, and duplicate submission windows.
+* Updated submission enforcement to read per-form spam settings with safe defaults and backward compatibility.
+* Added duplicate submission window filter support for developers.
 
 = 1.0.1 =
 

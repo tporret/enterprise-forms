@@ -20,6 +20,15 @@
         "submitButtonText": { "type": "string", "default": "Submit" },
         "successMessage": { "type": "string", "default": "Thank you for your submission." },
         "enableHoneypot": { "type": "boolean", "default": true },
+        "spam_prevention": {
+          "type": "object",
+          "properties": {
+            "enable_honeypot": { "type": "boolean", "default": true },
+            "submission_rate_limit": { "type": "integer", "minimum": 1, "default": 10 },
+            "submission_rate_window": { "type": "integer", "minimum": 1, "default": 60 },
+            "duplicate_submission_window": { "type": "integer", "minimum": 1, "default": 300 }
+          }
+        },
         "enableEncryption": { "type": "boolean", "default": false },
         "notificationEmail": { "type": "string", "format": "email" },
         "notification": {
