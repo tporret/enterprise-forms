@@ -15,6 +15,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 	private EP_Validator $validator;
 	private EP_Crypto $crypto;
 	private EP_REST_Payments $payments;
+	private bool $search_table_checked = false;
 
 	public function __construct() {
 		$this->namespace = 'enterprise-forms/v1';
@@ -72,6 +73,56 @@ class EP_REST_Entries extends WP_REST_Controller {
 						'status'  => [
 							'required'          => false,
 							'sanitize_callback' => 'sanitize_key',
+						],
+						'search'  => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'date_from' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'date_to' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<form_id>\\d+)/export',
+			[
+				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'export_items' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => [
+						'form_id' => [
+							'required'          => true,
+							'sanitize_callback' => 'absint',
+						],
+						'status'  => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_key',
+						],
+						'search'  => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'date_from' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'date_to' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'columns' => [
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
 						],
 					],
 				],
@@ -265,6 +316,11 @@ class EP_REST_Entries extends WP_REST_Controller {
 				__( 'Failed to save submission.', 'enterprise-forms' ),
 				[ 'status' => 500 ]
 			);
+		}
+
+		$entry_id = (int) $wpdb->insert_id;
+		if ( $entry_id > 0 ) {
+			$this->upsert_entry_search_index( $entry_id, $form_id, 'unread', $created_at, $validation['sanitized'] );
 		}
 
 		$this->mark_submission_fingerprint( $form_id, $validation['sanitized'], $security_settings['duplicate_submission_window'] );
@@ -673,56 +729,60 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$offset  = max( 0, absint( $request->get_param( 'offset' ) ) );
 		$limit   = max( 1, min( 100, absint( $request->get_param( 'limit' ) ) ) );
 		$status  = sanitize_key( (string) $request->get_param( 'status' ) );
+		$search  = sanitize_text_field( (string) $request->get_param( 'search' ) );
+		$date_from = sanitize_text_field( (string) $request->get_param( 'date_from' ) );
+		$date_to   = sanitize_text_field( (string) $request->get_param( 'date_to' ) );
 
 		$table_name = $wpdb->prefix . 'ep_entries';
+		[ $where_sql, $args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to );
+		$normalized_search = strtolower( trim( $search ) );
 
-		$where_sql  = 'WHERE form_id = %d';
-		$args       = [ $form_id ];
+		if ( '' === $normalized_search ) {
+			$total_query = "SELECT COUNT(*) FROM {$table_name} {$where_sql}";
+			$total       = (int) $wpdb->get_var( $wpdb->prepare( $total_query, $args ) );
 
-		if ( '' !== $status ) {
-			$where_sql .= ' AND status = %s';
-			$args[]     = $status;
-		}
+			$data_args = array_merge( $args, [ $limit, $offset ] );
+			$data_query = "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC LIMIT %d OFFSET %d";
+			$rows       = $wpdb->get_results( $wpdb->prepare( $data_query, $data_args ), ARRAY_A );
 
-		$total_query = "SELECT COUNT(*) FROM {$table_name} {$where_sql}";
-		$total       = (int) $wpdb->get_var( $wpdb->prepare( $total_query, $args ) );
-
-		$data_args = array_merge( $args, [ $limit, $offset ] );
-		$data_query = "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC LIMIT %d OFFSET %d";
-		$rows       = $wpdb->get_results( $wpdb->prepare( $data_query, $data_args ), ARRAY_A );
-
-		$items = [];
-		foreach ( (array) $rows as $row ) {
-			$payload = json_decode( (string) $row['payload'], true );
-			$decrypted_payload = [];
-
-			if ( is_array( $payload ) && isset( $payload['ciphertext'] ) && is_string( $payload['ciphertext'] ) ) {
-				$plaintext = $this->crypto->decrypt( $payload['ciphertext'] );
-				$decoded_plaintext = json_decode( $plaintext, true );
-				if ( is_array( $decoded_plaintext ) ) {
-					$decrypted_payload = $decoded_plaintext;
-				}
-			} elseif ( is_array( $payload ) ) {
-				$decrypted_payload = $payload;
+			$items = [];
+			foreach ( (array) $rows as $row ) {
+				$items[] = $this->prepare_entry_item( $row );
 			}
+		} else {
+			$search_table = $wpdb->prefix . 'ep_entry_search';
+			$this->backfill_search_index_for_form( $form_id );
 
-			$items[] = [
-				'id'         => (int) $row['id'],
-				'uuid'       => (string) $row['uuid'],
-				'form_id'    => (int) $row['form_id'],
-				'status'     => (string) $row['status'],
-				'payload'    => $decrypted_payload,
-				'created_at' => (string) $row['created_at'],
-			];
+			[ $search_where, $search_args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to, 'e' );
+			$boolean_query = $this->build_fulltext_boolean_query( $normalized_search );
+			$search_where .= ' AND (MATCH(es.search_text) AGAINST (%s IN BOOLEAN MODE) OR e.uuid LIKE %s OR e.status LIKE %s)';
+			$like_search = '%' . $wpdb->esc_like( $normalized_search ) . '%';
+			$search_args[] = $boolean_query;
+			$search_args[] = $like_search;
+			$search_args[] = $like_search;
+
+			$total_query = "SELECT COUNT(*) FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where}";
+			$total = (int) $wpdb->get_var( $wpdb->prepare( $total_query, $search_args ) );
+
+			$data_args = array_merge( $search_args, [ $limit, $offset ] );
+			$data_query = "SELECT e.id, e.uuid, e.form_id, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC LIMIT %d OFFSET %d";
+			$rows = $wpdb->get_results( $wpdb->prepare( $data_query, $data_args ), ARRAY_A );
+
+			$items = [];
+			foreach ( (array) $rows as $row ) {
+				$items[] = $this->prepare_entry_item( $row );
+			}
 		}
 
 		$total_pages = (int) ceil( $total / $limit );
 
 		$response = new WP_REST_Response(
 			[
-				'items'  => $items,
-				'offset' => $offset,
-				'limit'  => $limit,
+				'items'       => $items,
+				'offset'      => $offset,
+				'limit'       => $limit,
+				'total'       => $total,
+				'total_pages' => max( 1, $total_pages ),
 			],
 			200
 		);
@@ -731,5 +791,385 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$response->header( 'X-WP-TotalPages', (string) max( 1, $total_pages ) );
 
 		return $response;
+	}
+
+	public function export_items( $request ): WP_REST_Response|WP_Error {
+		global $wpdb;
+
+		$form_id = absint( $request['form_id'] );
+		$status  = sanitize_key( (string) $request->get_param( 'status' ) );
+		$search  = sanitize_text_field( (string) $request->get_param( 'search' ) );
+		$date_from = sanitize_text_field( (string) $request->get_param( 'date_from' ) );
+		$date_to   = sanitize_text_field( (string) $request->get_param( 'date_to' ) );
+		$requested_columns = $this->parse_export_columns( sanitize_text_field( (string) $request->get_param( 'columns' ) ) );
+
+		$table_name = $wpdb->prefix . 'ep_entries';
+		[ $where_sql, $args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to );
+		$normalized_search = strtolower( trim( $search ) );
+
+		if ( '' !== $normalized_search ) {
+			$this->backfill_search_index_for_form( $form_id );
+		}
+
+		if ( '' === $normalized_search ) {
+			$query = "SELECT id, uuid, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC";
+			$rows  = $wpdb->get_results( $wpdb->prepare( $query, $args ), ARRAY_A );
+		} else {
+			$search_table = $wpdb->prefix . 'ep_entry_search';
+			[ $search_where, $search_args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to, 'e' );
+			$boolean_query = $this->build_fulltext_boolean_query( $normalized_search );
+			$search_where .= ' AND (MATCH(es.search_text) AGAINST (%s IN BOOLEAN MODE) OR e.uuid LIKE %s OR e.status LIKE %s)';
+			$like_search = '%' . $wpdb->esc_like( $normalized_search ) . '%';
+			$search_args[] = $boolean_query;
+			$search_args[] = $like_search;
+			$search_args[] = $like_search;
+
+			$query = "SELECT e.id, e.uuid, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC";
+			$rows = $wpdb->get_results( $wpdb->prepare( $query, $search_args ), ARRAY_A );
+		}
+
+		$default_headers = [ 'entry_id', 'entry_uuid', 'status', 'created_at' ];
+		$headers = ! empty( $requested_columns ) ? $requested_columns : $default_headers;
+		$header_indexes = array_fill_keys( $headers, true );
+		$export_rows    = [];
+
+		foreach ( (array) $rows as $row ) {
+			$normalized_row = [
+				'id'         => (int) $row['id'],
+				'uuid'       => (string) $row['uuid'],
+				'form_id'    => $form_id,
+				'status'     => (string) $row['status'],
+				'payload'    => $this->decrypt_entry_payload( (string) $row['payload'] ),
+				'created_at' => (string) $row['created_at'],
+			];
+
+			$flattened_payload = $this->flatten_payload_for_export( $normalized_row['payload'] );
+			$export_row = [
+				'entry_id'   => (string) $normalized_row['id'],
+				'entry_uuid' => (string) $normalized_row['uuid'],
+				'status'     => (string) $normalized_row['status'],
+				'created_at' => (string) $normalized_row['created_at'],
+			];
+
+			foreach ( $flattened_payload as $column => $value ) {
+				if ( empty( $requested_columns ) || isset( $header_indexes[ $column ] ) ) {
+					$export_row[ $column ] = $value;
+					if ( ! isset( $header_indexes[ $column ] ) ) {
+						$headers[] = $column;
+						$header_indexes[ $column ] = true;
+					}
+				}
+			}
+
+			$export_rows[] = $export_row;
+		}
+
+		$stream = fopen( 'php://temp', 'r+' );
+		if ( false === $stream ) {
+			return new WP_Error(
+				'ep_forms_export_failed',
+				__( 'Unable to prepare export file.', 'enterprise-forms' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		fputcsv( $stream, $headers );
+
+		foreach ( $export_rows as $row ) {
+			$csv_row = [];
+			foreach ( $headers as $header ) {
+				$csv_row[] = $row[ $header ] ?? '';
+			}
+			fputcsv( $stream, $csv_row );
+		}
+
+		rewind( $stream );
+		$csv = stream_get_contents( $stream );
+		fclose( $stream );
+
+		if ( false === $csv ) {
+			return new WP_Error(
+				'ep_forms_export_failed',
+				__( 'Unable to prepare export file.', 'enterprise-forms' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		$filename = sprintf( 'form-%d-entries-%s.csv', $form_id, gmdate( 'Y-m-d' ) );
+		$response = new WP_REST_Response( "\xEF\xBB\xBF" . $csv, 200 );
+		$response->header( 'Content-Type', 'text/csv; charset=utf-8' );
+		$response->header( 'Content-Disposition', 'attachment; filename="' . $filename . '"' );
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+
+		return $response;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, string>
+	 */
+	private function flatten_payload_for_export( array $payload ): array {
+		$flattened = [];
+
+		foreach ( $payload as $key => $value ) {
+			$column = sanitize_key( (string) $key );
+			if ( '' === $column ) {
+				continue;
+			}
+
+			$this->flatten_payload_node( $flattened, $column, $value );
+		}
+
+		return $flattened;
+	}
+
+	/**
+	 * @param array<string, string> $flattened
+	 */
+	private function flatten_payload_node( array &$flattened, string $prefix, mixed $value ): void {
+		if ( is_array( $value ) ) {
+			if ( wp_is_numeric_array( $value ) ) {
+				$flattened[ $prefix ] = $this->stringify_export_value( $value );
+				return;
+			}
+
+			foreach ( $value as $child_key => $child_value ) {
+				$child_column = sanitize_key( (string) $child_key );
+				if ( '' === $child_column ) {
+					continue;
+				}
+
+				$this->flatten_payload_node( $flattened, $prefix . '.' . $child_column, $child_value );
+			}
+
+			return;
+		}
+
+		$flattened[ $prefix ] = $this->stringify_export_value( $value );
+	}
+
+	private function stringify_export_value( mixed $value ): string {
+		if ( null === $value ) {
+			return '';
+		}
+
+		if ( is_bool( $value ) ) {
+			return $value ? 'true' : 'false';
+		}
+
+		if ( is_scalar( $value ) ) {
+			return (string) $value;
+		}
+
+		$encoded = wp_json_encode( $value );
+		return false === $encoded ? '' : $encoded;
+	}
+
+	/**
+	 * @return array{0: string, 1: array<int, int|string>}
+	 */
+	private function build_entries_where_clause( int $form_id, string $status, string $date_from, string $date_to, string $table_alias = '' ): array {
+		$prefix = '' !== $table_alias ? $table_alias . '.' : '';
+		$where_sql = "WHERE {$prefix}form_id = %d";
+		$args      = [ $form_id ];
+
+		if ( '' !== $status ) {
+			$where_sql .= " AND {$prefix}status = %s";
+			$args[] = $status;
+		}
+
+		$normalized_from = $this->normalize_date_boundary( $date_from, false );
+		$normalized_to   = $this->normalize_date_boundary( $date_to, true );
+
+		if ( null !== $normalized_from ) {
+			$where_sql .= " AND {$prefix}created_at >= %s";
+			$args[] = $normalized_from;
+		}
+
+		if ( null !== $normalized_to ) {
+			$where_sql .= " AND {$prefix}created_at < %s";
+			$args[] = $normalized_to;
+		}
+
+		return [ $where_sql, $args ];
+	}
+
+	private function normalize_date_boundary( string $input, bool $is_upper_bound ): ?string {
+		$trimmed = trim( $input );
+		if ( '' === $trimmed || 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}$/', $trimmed ) ) {
+			return null;
+		}
+
+		$timestamp = strtotime( $trimmed . ' 00:00:00 UTC' );
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		if ( $is_upper_bound ) {
+			$timestamp += DAY_IN_SECONDS;
+		}
+
+		return gmdate( 'Y-m-d H:i:s', $timestamp );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private function prepare_entry_item( array $row ): array {
+		return [
+			'id'         => (int) $row['id'],
+			'uuid'       => (string) $row['uuid'],
+			'form_id'    => (int) $row['form_id'],
+			'status'     => (string) $row['status'],
+			'payload'    => $this->decrypt_entry_payload( (string) $row['payload'] ),
+			'created_at' => (string) $row['created_at'],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function decrypt_entry_payload( string $raw_payload ): array {
+		$payload = json_decode( $raw_payload, true );
+		if ( ! is_array( $payload ) ) {
+			return [];
+		}
+
+		if ( isset( $payload['ciphertext'] ) && is_string( $payload['ciphertext'] ) ) {
+			$plaintext = $this->crypto->decrypt( $payload['ciphertext'] );
+			$decoded_plaintext = json_decode( $plaintext, true );
+			return is_array( $decoded_plaintext ) ? $decoded_plaintext : [];
+		}
+
+		return $payload;
+	}
+
+	private function build_fulltext_boolean_query( string $normalized_search ): string {
+		$parts = preg_split( '/\s+/', trim( $normalized_search ) );
+		if ( ! is_array( $parts ) ) {
+			return $normalized_search;
+		}
+
+		$tokens = [];
+		foreach ( $parts as $part ) {
+			$token = preg_replace( '/[^a-z0-9_\-.]/i', '', $part );
+			if ( null === $token || '' === $token ) {
+				continue;
+			}
+
+			$tokens[] = $token . '*';
+		}
+
+		return ! empty( $tokens ) ? implode( ' ', $tokens ) : $normalized_search;
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private function parse_export_columns( string $raw_columns ): array {
+		$parts = array_filter(
+			array_map( 'trim', explode( ',', $raw_columns ) ),
+			static fn( string $part ): bool => '' !== $part
+		);
+
+		$columns = [];
+		$index = [];
+		foreach ( $parts as $column ) {
+			$sanitized = preg_replace( '/[^a-z0-9_.-]/', '', strtolower( $column ) );
+			if ( null === $sanitized || '' === $sanitized || isset( $index[ $sanitized ] ) ) {
+				continue;
+			}
+
+			$columns[] = $sanitized;
+			$index[ $sanitized ] = true;
+		}
+
+		return $columns;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function upsert_entry_search_index( int $entry_id, int $form_id, string $status, string $created_at, array $payload ): void {
+		global $wpdb;
+
+		$this->ensure_search_table_exists();
+
+		$search_table = $wpdb->prefix . 'ep_entry_search';
+		$payload_text = wp_json_encode( $payload );
+		$search_text = strtolower( implode( ' ', [ $status, $created_at, false === $payload_text ? '' : $payload_text ] ) );
+
+		$wpdb->replace(
+			$search_table,
+			[
+				'entry_id' => $entry_id,
+				'form_id' => $form_id,
+				'status' => $status,
+				'created_at' => $created_at,
+				'search_text' => $search_text,
+			],
+			[ '%d', '%d', '%s', '%s', '%s' ]
+		);
+	}
+
+	private function backfill_search_index_for_form( int $form_id ): void {
+		global $wpdb;
+
+		$this->ensure_search_table_exists();
+
+		$table_name = $wpdb->prefix . 'ep_entries';
+		$search_table = $wpdb->prefix . 'ep_entry_search';
+		do {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT e.id, e.form_id, e.status, e.created_at, e.payload FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id WHERE e.form_id = %d AND es.entry_id IS NULL ORDER BY e.id DESC LIMIT 500",
+					$form_id
+				),
+				ARRAY_A
+			);
+
+			foreach ( (array) $rows as $row ) {
+				$payload = $this->decrypt_entry_payload( (string) $row['payload'] );
+				$this->upsert_entry_search_index(
+					(int) $row['id'],
+					(int) $row['form_id'],
+					(string) $row['status'],
+					(string) $row['created_at'],
+					$payload
+				);
+			}
+		} while ( ! empty( $rows ) );
+	}
+
+	private function ensure_search_table_exists(): void {
+		if ( $this->search_table_checked ) {
+			return;
+		}
+
+		global $wpdb;
+		$search_table = $wpdb->prefix . 'ep_entry_search';
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $search_table ) );
+		if ( $table_exists === $search_table ) {
+			$this->search_table_checked = true;
+			return;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$charset_collate = $wpdb->get_charset_collate();
+		$sql = "CREATE TABLE {$search_table} (
+			entry_id BIGINT(20) UNSIGNED NOT NULL,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'unread',
+			created_at DATETIME NOT NULL,
+			search_text LONGTEXT NOT NULL,
+			PRIMARY KEY  (entry_id),
+			KEY form_created (form_id, created_at),
+			KEY form_status_created (form_id, status, created_at),
+			FULLTEXT KEY search_text (search_text)
+		) {$charset_collate};";
+
+		dbDelta( $sql );
+		$this->search_table_checked = true;
 	}
 }

@@ -62,6 +62,21 @@ class EP_Installer {
 
 		dbDelta( $sql );
 
+		$search_table = $wpdb->prefix . 'ep_entry_search';
+		$search_sql = "CREATE TABLE {$search_table} (
+			entry_id BIGINT(20) UNSIGNED NOT NULL,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'unread',
+			created_at DATETIME NOT NULL,
+			search_text LONGTEXT NOT NULL,
+			PRIMARY KEY  (entry_id),
+			KEY form_created (form_id, created_at),
+			KEY form_status_created (form_id, status, created_at),
+			FULLTEXT KEY search_text (search_text)
+		) {$charset_collate};";
+
+		dbDelta( $search_sql );
+
 		$payments_table = $wpdb->prefix . 'ep_payment_intents';
 		$payments_sql = "CREATE TABLE {$payments_table} (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -93,7 +108,7 @@ class EP_Installer {
 		require_once __DIR__ . '/class-ep-cloud-storage.php';
 		\EP_Cloud_Storage::create_uploads_table();
 
-		update_option( 'ep_forms_db_version', '2.1.0', false );
+		update_option( 'ep_forms_db_version', '2.2.0', false );
 	}
 
 	public static function normalize_payment_intents_table(): void {
