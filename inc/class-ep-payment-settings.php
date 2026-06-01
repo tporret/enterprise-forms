@@ -17,6 +17,32 @@ class EP_Payment_Settings {
 				'secret_key'      => [ 'secret' => true ],
 			],
 		],
+		'braintree' => [
+			'label'  => 'Braintree',
+			'fields' => [
+				'environment' => [ 'secret' => false ],
+				'merchant_id' => [ 'secret' => false ],
+				'public_key'  => [ 'secret' => false ],
+				'private_key' => [ 'secret' => true ],
+			],
+		],
+		'paypal' => [
+			'label'  => 'PayPal',
+			'fields' => [
+				'environment'   => [ 'secret' => false ],
+				'client_id'     => [ 'secret' => false ],
+				'client_secret' => [ 'secret' => true ],
+			],
+		],
+		'square' => [
+			'label'  => 'Square',
+			'fields' => [
+				'environment'    => [ 'secret' => false ],
+				'application_id' => [ 'secret' => false ],
+				'location_id'    => [ 'secret' => false ],
+				'access_token'   => [ 'secret' => true ],
+			],
+		],
 	];
 
 	private EP_Crypto $crypto;
@@ -87,6 +113,18 @@ class EP_Payment_Settings {
 				}
 
 				$value = sanitize_text_field( (string) $gateway_payload[ $field ] );
+				if ( 'braintree' === $gateway && 'environment' === $field ) {
+					$value = in_array( sanitize_key( $value ), [ 'sandbox', 'production' ], true ) ? sanitize_key( $value ) : 'sandbox';
+				}
+
+				if ( 'paypal' === $gateway && 'environment' === $field ) {
+					$value = in_array( sanitize_key( $value ), [ 'sandbox', 'live' ], true ) ? sanitize_key( $value ) : 'sandbox';
+				}
+
+				if ( 'square' === $gateway && 'environment' === $field ) {
+					$value = in_array( sanitize_key( $value ), [ 'sandbox', 'production' ], true ) ? sanitize_key( $value ) : 'sandbox';
+				}
+
 				if ( ! empty( $meta['secret'] ) && '' === $value ) {
 					continue;
 				}
@@ -129,6 +167,16 @@ class EP_Payment_Settings {
 		switch ( $gateway ) {
 			case 'stripe':
 				return [ 'publishable_key' => $credentials['publishable_key'] ?? '' ];
+
+			case 'paypal':
+				return [ 'client_id' => $credentials['client_id'] ?? '' ];
+
+			case 'square':
+				return [
+					'application_id' => $credentials['application_id'] ?? '',
+					'location_id'    => $credentials['location_id'] ?? '',
+					'environment'    => $credentials['environment'] ?? 'sandbox',
+				];
 		}
 
 		return [];
@@ -141,6 +189,15 @@ class EP_Payment_Settings {
 		switch ( $gateway ) {
 			case 'stripe':
 				return '' !== ( $credentials['publishable_key'] ?? '' ) && '' !== ( $credentials['secret_key'] ?? '' );
+
+			case 'braintree':
+				return '' !== ( $credentials['merchant_id'] ?? '' ) && '' !== ( $credentials['public_key'] ?? '' ) && '' !== ( $credentials['private_key'] ?? '' );
+
+			case 'paypal':
+				return '' !== ( $credentials['client_id'] ?? '' ) && '' !== ( $credentials['client_secret'] ?? '' );
+
+			case 'square':
+				return '' !== ( $credentials['application_id'] ?? '' ) && '' !== ( $credentials['location_id'] ?? '' ) && '' !== ( $credentials['access_token'] ?? '' );
 		}
 
 		return false;
@@ -149,18 +206,34 @@ class EP_Payment_Settings {
 	private function get_field( string $gateway, string $field ): string {
 		$option_name = self::option_name( $gateway, $field );
 		$value       = (string) get_option( $option_name, '' );
+		$definition = self::GATEWAYS[ self::normalize_gateway( $gateway ) ];
+		$is_secret  = ! empty( $definition['fields'][ $field ]['secret'] );
+
+		if ( '' === $value && 'braintree' === $gateway && 'environment' === $field ) {
+			return 'sandbox';
+		}
+
+		if ( '' === $value && 'paypal' === $gateway && 'environment' === $field ) {
+			return 'sandbox';
+		}
+
+		if ( '' === $value && 'square' === $gateway && 'environment' === $field ) {
+			return 'sandbox';
+		}
 
 		if ( '' === $value && 'stripe' === $gateway ) {
 			$legacy_option = 'publishable_key' === $field ? 'ep_forms_stripe_publishable_key' : ( 'secret_key' === $field ? 'ep_forms_stripe_secret_key' : '' );
 			$value = '' !== $legacy_option ? (string) get_option( $legacy_option, '' ) : '';
+
+			if ( '' !== $value && $this->migrate_legacy_stripe_field( $field, $value, $is_secret ) ) {
+				delete_option( $legacy_option );
+			}
 		}
 
 		if ( '' === $value ) {
 			return '';
 		}
 
-		$definition = self::GATEWAYS[ self::normalize_gateway( $gateway ) ];
-		$is_secret  = ! empty( $definition['fields'][ $field ]['secret'] );
 		if ( ! $is_secret ) {
 			return sanitize_text_field( $value );
 		}
@@ -175,5 +248,19 @@ class EP_Payment_Settings {
 	private function update_field( string $gateway, string $field, string $value, bool $secret ): void {
 		$option_name = self::option_name( $gateway, $field );
 		update_option( $option_name, $secret ? $this->crypto->encrypt( $value ) : $value, false );
+	}
+
+	private function migrate_legacy_stripe_field( string $field, string $value, bool $secret ): bool {
+		if ( $secret && ! EP_Crypto::is_configured() ) {
+			return false;
+		}
+
+		try {
+			$this->update_field( 'stripe', $field, sanitize_text_field( $value ), $secret );
+		} catch ( Exception ) {
+			return false;
+		}
+
+		return true;
 	}
 }

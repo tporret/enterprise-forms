@@ -56,6 +56,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 					'form_id'        => [ 'required' => true, 'sanitize_callback' => 'absint' ],
 					'schema_version' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ],
 					'ep_forms_nonce' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ],
+					'ep_submission_token' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ],
 					'values'         => [ 'required' => false ],
 				],
 			]
@@ -75,21 +76,27 @@ class EP_REST_Payments extends WP_REST_Controller {
 	}
 
 	public function public_payment_permissions_check( WP_REST_Request $request ): bool|WP_Error {
-		$header_nonce = sanitize_text_field( (string) $request->get_header( 'X-WP-Nonce' ) );
-		if ( '' !== $header_nonce && wp_verify_nonce( $header_nonce, 'wp_rest' ) ) {
-			return true;
-		}
-
 		$public_nonce = sanitize_text_field( (string) $request->get_param( 'ep_forms_nonce' ) );
-		if ( '' !== $public_nonce && wp_verify_nonce( $public_nonce, 'ep_forms_public_submit' ) ) {
-			return true;
+		if ( '' === $public_nonce || ! wp_verify_nonce( $public_nonce, 'ep_forms_public_submit' ) ) {
+			return new WP_Error(
+				'ep_forms_invalid_nonce',
+				__( 'Invalid or missing security token.', 'enterprise-forms' ),
+				[ 'status' => 403 ]
+			);
 		}
 
-		return new WP_Error(
-			'ep_forms_invalid_nonce',
-			__( 'Invalid or missing security token.', 'enterprise-forms' ),
-			[ 'status' => 403 ]
-		);
+		$form_id = absint( $request->get_param( 'form_id' ) );
+		$token_check = $this->validate_submission_token_for_payment( $request, $form_id );
+		if ( is_wp_error( $token_check ) ) {
+			return $token_check;
+		}
+
+		$rate_limited = $this->check_payment_intent_rate_limit( $form_id );
+		if ( is_wp_error( $rate_limited ) ) {
+			return $rate_limited;
+		}
+
+		return true;
 	}
 
 	public function get_settings(): WP_REST_Response {
@@ -115,6 +122,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 		$form_id = absint( $request->get_param( 'form_id' ) );
 		$values  = $request->get_param( 'values' );
 		$values  = is_array( $values ) ? $values : [];
+		$submission_token = sanitize_text_field( (string) $request->get_param( 'ep_submission_token' ) );
 
 		try {
 			$schema       = $this->load_form_schema( $form_id );
@@ -130,11 +138,12 @@ class EP_REST_Payments extends WP_REST_Controller {
 					'form_id'        => (string) $form_id,
 					'schema_version' => $schema_version,
 					'record_id'      => $record_id,
+					'session_hash'   => $this->payment_session_hash( $submission_token ),
 					'description'    => $payment['description'],
 				]
 			);
 			$intent_id = sanitize_text_field( (string) ( $intent['id'] ?? '' ) );
-			$this->store_payment_intent_record( $record_id, $gateway_slug, $intent_id, $form_id, $schema_version, (int) $payment['amount'], $payment['currency'], 'created' );
+			$this->store_payment_intent_record( $record_id, $gateway_slug, $intent_id, $form_id, $schema_version, (int) $payment['amount'], $payment['currency'], $this->payment_session_hash( $submission_token ), 'created' );
 		} catch ( Exception $exception ) {
 			Observability::increment_metric( 'payment_failures' );
 			Observability::log( 'error', 'payment_intent_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id, 'message' => $exception->getMessage() ] );
@@ -177,6 +186,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 			$payment_id    = sanitize_text_field( (string) ( $payload['payment_intent_id'] ?? $payload['payment_transaction_id'] ?? '' ) );
 			$payment_record_id = sanitize_text_field( (string) ( $payload['payment_record_id'] ?? '' ) );
 			$payment_token = sanitize_text_field( (string) ( $payload['payment_token'] ?? '' ) );
+			$submission_token = sanitize_text_field( (string) ( $payload['ep_submission_token'] ?? '' ) );
 			if ( '' === $payment_id ) {
 				$payment_id = $payment_token;
 			}
@@ -196,13 +206,13 @@ class EP_REST_Payments extends WP_REST_Controller {
 				return $record;
 			}
 
-			$record_check = $this->validate_payment_intent_record( $record, $form_id, $schema_version, (int) $expected['amount'], $expected['currency'] );
+			$record_check = $this->validate_payment_intent_record( $record, $form_id, $schema_version, (int) $expected['amount'], $expected['currency'], $submission_token );
 			if ( is_wp_error( $record_check ) ) {
 				return $record_check;
 			}
 
 			$gateway  = $this->payment_factory->make( $gateway_slug );
-			if ( 'braintree' === $gateway_slug && '' !== $payment_token && method_exists( $gateway, 'process_token' ) ) {
+			if ( in_array( $gateway_slug, [ 'braintree', 'square' ], true ) && '' !== $payment_token && method_exists( $gateway, 'process_token' ) ) {
 				$intent     = $gateway->process_token( $payment_token, (int) $expected['amount'], $expected['currency'], [ 'form_id' => (string) $form_id, 'schema_version' => $schema_version, 'record_id' => (string) $record['record_id'] ] );
 				$payment_id = sanitize_text_field( (string) ( $intent['id'] ?? '' ) );
 			} else {
@@ -349,7 +359,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 			record_id CHAR(36) NOT NULL,
 			gateway VARCHAR(50) NOT NULL,
 			intent_id VARCHAR(191) DEFAULT '' NOT NULL,
-			transaction_id VARCHAR(191) DEFAULT '' NOT NULL,
+			transaction_id VARCHAR(191) DEFAULT NULL,
 			form_id BIGINT(20) UNSIGNED NOT NULL,
 			schema_version VARCHAR(50) DEFAULT '' NOT NULL,
 			amount BIGINT(20) UNSIGNED NOT NULL,
@@ -369,26 +379,27 @@ class EP_REST_Payments extends WP_REST_Controller {
 		) {$charset_collate};";
 
 		dbDelta( $sql );
+		EP_Installer::normalize_payment_intents_table();
 	}
 
-	private function store_payment_intent_record( string $record_id, string $gateway, string $intent_id, int $form_id, string $schema_version, int $amount, string $currency, string $status ): void {
+	private function store_payment_intent_record( string $record_id, string $gateway, string $intent_id, int $form_id, string $schema_version, int $amount, string $currency, string $session_hash, string $status ): void {
 		global $wpdb;
 
 		$this->create_payment_intents_table();
 		$stored_intent_id = '' !== $intent_id ? $intent_id : $record_id;
 		$now = current_time( 'mysql', true );
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$wpdb->prefix . 'ep_payment_intents',
 			[
 				'record_id'      => $record_id,
 				'gateway'        => $gateway,
 				'intent_id'      => $stored_intent_id,
-				'transaction_id' => '',
+				'transaction_id' => null,
 				'form_id'        => $form_id,
 				'schema_version' => $schema_version,
 				'amount'         => $amount,
 				'currency'       => strtolower( $currency ),
-				'session_hash'   => $this->payment_session_hash(),
+				'session_hash'   => $session_hash,
 				'status'         => $status,
 				'entry_uuid'     => '',
 				'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
@@ -397,6 +408,10 @@ class EP_REST_Payments extends WP_REST_Controller {
 			],
 			[ '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
 		);
+
+		if ( false === $inserted ) {
+			throw new Exception( __( 'Unable to save the local payment record.', 'enterprise-forms' ) );
+		}
 	}
 
 	/**
@@ -430,9 +445,14 @@ class EP_REST_Payments extends WP_REST_Controller {
 	/**
 	 * @param array<string, mixed> $record
 	 */
-	private function validate_payment_intent_record( array $record, int $form_id, string $schema_version, int $amount, string $currency ): bool|WP_Error {
+	private function validate_payment_intent_record( array $record, int $form_id, string $schema_version, int $amount, string $currency, string $submission_token ): bool|WP_Error {
 		if ( (int) $record['form_id'] !== $form_id || (string) $record['schema_version'] !== $schema_version ) {
 			return new WP_Error( 'ep_forms_payment_form_mismatch', __( 'Payment intent does not belong to this form version.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+
+		$session_hash = sanitize_text_field( (string) ( $record['session_hash'] ?? '' ) );
+		if ( '' !== $session_hash && $session_hash !== $this->payment_session_hash( $submission_token ) ) {
+			return new WP_Error( 'ep_forms_payment_session_mismatch', __( 'Payment intent does not belong to this submission session.', 'enterprise-forms' ), [ 'status' => 400 ] );
 		}
 
 		if ( (int) $record['amount'] !== $amount || strtolower( (string) $record['currency'] ) !== strtolower( $currency ) ) {
@@ -505,10 +525,63 @@ class EP_REST_Payments extends WP_REST_Controller {
 		return false !== $updated ? true : new WP_Error( 'ep_forms_payment_claim_failed', __( 'Unable to reserve payment transaction for this submission.', 'enterprise-forms' ), [ 'status' => 500 ] );
 	}
 
-	private function payment_session_hash(): string {
+	private function validate_submission_token_for_payment( WP_REST_Request $request, int $form_id ): bool|WP_Error {
+		$token = sanitize_text_field( (string) $request->get_param( 'ep_submission_token' ) );
+		if ( '' === $token ) {
+			return new WP_Error(
+				'ep_forms_missing_submission_token',
+				__( 'Missing submission token.', 'enterprise-forms' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		$stored_form_id = absint( get_transient( $this->submission_token_key( $token ) ) );
+		if ( $stored_form_id !== $form_id ) {
+			return new WP_Error(
+				'ep_forms_invalid_submission_token',
+				__( 'This form submission token is invalid or has already been used.', 'enterprise-forms' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		return true;
+	}
+
+	private function check_payment_intent_rate_limit( int $form_id ): bool|WP_Error {
+		$limit = (int) apply_filters( 'ep_forms_payment_intent_rate_limit', 10, $form_id );
+		$window = (int) apply_filters( 'ep_forms_payment_intent_rate_window', MINUTE_IN_SECONDS, $form_id );
+
+		if ( $limit < 1 || $window < 1 ) {
+			return true;
+		}
+
+		$key = 'ep_payment_intent_rate_' . $form_id . '_' . $this->request_fingerprint();
+		$count = absint( get_transient( $key ) );
+		if ( $count >= $limit ) {
+			return new WP_Error(
+				'ep_forms_payment_rate_limited',
+				__( 'Too many payment attempts. Please wait a moment and try again.', 'enterprise-forms' ),
+				[ 'status' => 429 ]
+			);
+		}
+
+		set_transient( $key, $count + 1, $window );
+
+		return true;
+	}
+
+	private function payment_session_hash( string $submission_token ): string {
+		return hash_hmac( 'sha256', $submission_token, wp_salt( 'nonce' ) );
+	}
+
+	private function request_fingerprint(): string {
 		$ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( (string) $_SERVER['REMOTE_ADDR'] ) ) : '';
 
 		return hash_hmac( 'sha256', $ip_address, wp_salt( 'nonce' ) );
+	}
+
+	private function submission_token_key( string $token ): string {
+		return 'ep_submit_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
 	}
 
 	/**

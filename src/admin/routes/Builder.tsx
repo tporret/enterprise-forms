@@ -24,7 +24,7 @@ interface ParsedSchemaField {
 	multiple?: boolean;
 	button_text?: string;
 	options?: unknown;
-	gateway?: 'stripe';
+	gateway?: 'stripe' | 'braintree' | 'paypal' | 'square';
 	amount_source?: 'static' | 'field';
 	amount?: string;
 	amount_field?: string;

@@ -117,7 +117,7 @@
         "conditionalLogic": {
           "$ref": "#/definitions/ConditionalLogic"
         },
-        "gateway": { "type": "string", "enum": ["stripe"] },
+        "gateway": { "type": "string", "enum": ["stripe", "braintree", "paypal", "square"] },
         "amount_source": { "type": "string", "enum": ["static", "field"] },
         "amount": { "type": "string" },
         "amount_field": { "type": "string" },

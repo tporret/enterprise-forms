@@ -74,7 +74,7 @@ class Observability {
 		$sanitized = [];
 		foreach ( $context as $key => $value ) {
 			$key = sanitize_key( (string) $key );
-			if ( in_array( $key, [ 'secret', 'secret_key', 'private_key', 'token', 'payment_token', 'client_secret' ], true ) ) {
+			if ( in_array( $key, [ 'secret', 'secret_key', 'private_key', 'token', 'access_token', 'payment_token', 'client_secret' ], true ) ) {
 				$sanitized[ $key ] = '[redacted]';
 				continue;
 			}

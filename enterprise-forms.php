@@ -6,7 +6,7 @@
  * Version:           1.0.1
  * Requires at least: 6.5
  * Requires PHP:      8.2
- * Author:            Senior WordPress Core Architect
+ * Author:            tporret
  * License:           GPL-2.0-or-later
  * Text Domain:       enterprise-forms
  * Domain Path:       /languages
@@ -27,6 +27,8 @@ require_once __DIR__ . '/inc/class-ep-storage-settings.php';
 require_once __DIR__ . '/inc/interface-ep-payment-gateway.php';
 require_once __DIR__ . '/inc/class-ep-gateway-stripe.php';
 require_once __DIR__ . '/inc/class-ep-gateway-braintree.php';
+require_once __DIR__ . '/inc/class-ep-gateway-paypal.php';
+require_once __DIR__ . '/inc/class-ep-gateway-square.php';
 require_once __DIR__ . '/inc/class-ep-payment-factory.php';
 require_once __DIR__ . '/inc/class-ep-validator.php';
 require_once __DIR__ . '/inc/class-ep-rest-entries.php';

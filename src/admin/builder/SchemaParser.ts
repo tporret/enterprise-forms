@@ -19,7 +19,17 @@ const readBoolean = ( input: unknown, fallback = false ): boolean => {
 	return typeof input === 'boolean' ? input : fallback;
 };
 
-const readGateway = ( _input: unknown ): 'stripe' => 'stripe';
+const readGateway = ( input: unknown ): 'stripe' | 'braintree' | 'paypal' | 'square' => {
+	if ( typeof input !== 'string' ) {
+		return 'stripe';
+	}
+
+	if ( input === 'braintree' || input === 'paypal' || input === 'square' ) {
+		return input;
+	}
+
+	return 'stripe';
+};
 
 export class SchemaParser {
 	public static parseBlocks( blocks: unknown[], settings?: FormSettings, existingLogic: ConditionalLogicRule[] = [] ): FormSchema {

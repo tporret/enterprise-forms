@@ -17,7 +17,7 @@ interface CanvasBlockInfo {
 	attributes: Record< string, unknown >;
 }
 
-type PaymentGateway = 'stripe';
+type PaymentGateway = 'stripe' | 'braintree' | 'paypal' | 'square';
 
 interface PaymentSettingsResponse {
 	gateways?: Record< string, { label: string; configured: boolean; implemented?: boolean } >;
@@ -28,6 +28,9 @@ type RemoveBlock = ( clientId: string, selectPrevious?: boolean ) => void;
 
 const PAYMENT_GATEWAY_LABELS: Record< PaymentGateway, string > = {
 	stripe: 'Stripe',
+	braintree: 'Braintree',
+	paypal: 'PayPal',
+	square: 'Square',
 };
 
 const useGatewayOptions = (): Array< { label: string; value: PaymentGateway } > => {

@@ -1,6 +1,6 @@
 === Enterprise Forms ===
 Contributors: terrencelp
-Tags: forms, form builder, payments, stripe, block editor, rest api, interactivity api
+Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
 Stable tag: 1.0.1
@@ -22,8 +22,8 @@ Use it to create forms, publish them with a block, collect submissions through c
 * Frontend rendering through the Enterprise Form block.
 * Encrypted submission payload storage.
 * File upload handling using native WordPress media tools.
-* Payment Checkout block with Stripe server verification.
-* Stripe payment settings with non-Stripe providers hidden for V1.
+* Payment Checkout block with Stripe, Braintree, PayPal, and Square support.
+* Encrypted payment credential storage with secret values hidden from settings responses.
 * Per-form notification controls with fallback to the site admin email.
 * Built-in frontend themes for different presentation styles.
 * Entry viewing screen for submitted data.
@@ -50,13 +50,21 @@ Use it to create forms, publish them with a block, collect submissions through c
 
 = Payments =
 
-Enterprise Forms V1 supports Stripe checkout through PaymentIntents and Stripe Elements. Braintree, Authorize.Net, Adyen, and Square are intentionally hidden from the settings screen, builder, and schema until their full processing layers are ready.
+Enterprise Forms supports Stripe, Braintree, PayPal, and Square payment checkout through the Payment Checkout block.
 
-Payment amounts are calculated server-side from the saved form schema. Payment-required submissions are verified with the selected gateway before entries are stored.
+Stripe uses PaymentIntents and Stripe Elements. Braintree uses client tokens and Drop-in payment method nonces. PayPal uses Orders and PayPal Buttons. Square uses the Web Payments SDK and server-side payment creation.
+
+Payment amounts are calculated server-side from the saved form schema. Payment-required submissions are verified with the selected gateway before entries are stored. Public payment preparation requires the form nonce and live submission token, local payment records are bound to that token, and claimed gateway transactions are protected against replay.
+
+Secret payment credentials are encrypted in WordPress options. Settings responses return saved-state flags for secrets instead of returning the secret values.
+
+= Square credentials =
+
+For Square, get the Application ID and Access Token from the Square Developer Dashboard application credentials, and get the Location ID from the application's Locations section. Use sandbox credentials in sandbox mode and production credentials in production mode.
 
 = Developer dependencies =
 
-Run `composer install` during development so the Stripe PHP SDK is available through `vendor/autoload.php`. Release zip archives include optimized Composer dependencies.
+Run `composer install` during development so the Stripe and Braintree PHP SDKs are available through `vendor/autoload.php`. Release zip archives include optimized Composer dependencies.
 
 == Installation ==
 
@@ -88,17 +96,31 @@ Yes. Uploaded files are stored through the normal WordPress media workflow and l
 
 = Does the plugin support payments? =
 
-Yes. Use the Payment Checkout block after configuring Stripe under the Payments settings screen. Stripe checkout is the supported V1 payment path.
+Yes. Use the Payment Checkout block after configuring Stripe, Braintree, PayPal, or Square under the Payments settings screen.
 
 = Are payment amounts trusted from the browser? =
 
-No. The server calculates payment amounts from the saved form schema and verifies the completed gateway transaction before saving a payment-required entry.
+No. The server calculates payment amounts from the saved form schema and verifies the completed gateway transaction before saving a payment-required entry. Payment setup is tied to the form nonce and submission token, and completed gateway transactions cannot be reused for another entry.
+
+= Are payment credentials returned to the browser? =
+
+No secret credentials are returned to the browser. The frontend only receives public client configuration required by a gateway, such as a Stripe publishable key, PayPal client ID, or Square application and location IDs.
 
 = Who can view entries? =
 
 Entry viewing is restricted to privileged users in wp-admin.
 
 == Changelog ==
+
+= 1.0.1 =
+
+* Added Braintree, PayPal, and Square payment gateway wiring.
+* Added encrypted payment credential storage for all supported gateways.
+* Added public payment-intent protection using form nonce and submission token checks.
+* Added submission-token binding for local payment records.
+* Updated payment intent storage so multiple unclaimed checkout attempts can coexist while claimed transactions remain unique.
+* Added migration of legacy plaintext Stripe secret settings into encrypted gateway storage.
+* Added Square credential guidance in payment documentation.
 
 = 1.0.0 =
 
@@ -115,6 +137,10 @@ Entry viewing is restricted to privileged users in wp-admin.
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+
+Payment settings now support Stripe, Braintree, PayPal, and Square. Legacy Stripe secrets are migrated into encrypted storage when encryption is configured.
 
 = 1.0.0 =
 

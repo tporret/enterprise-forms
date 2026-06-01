@@ -129,6 +129,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$schema_version  = sanitize_text_field( (string) $request->get_param( 'schema_version' ) );
 		$payload         = $request->get_params();
 		$file_payload    = $request->get_file_params();
+		$submission_token = sanitize_text_field( (string) $request->get_param( 'ep_submission_token' ) );
 
 		if ( ! EP_Crypto::is_configured() ) {
 			Observability::increment_metric( 'submission_encryption_blocks' );
@@ -178,6 +179,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 
 		$payment_payload = $payload;
 		$payment_payload['schema_version'] = $schema_version;
+		$payment_payload['ep_submission_token'] = $submission_token;
 		$payment_sanitized = $this->payments->verify_payment_for_submission( $form_id, $payment_payload, $validation['sanitized'] );
 		if ( is_wp_error( $payment_sanitized ) ) {
 			return $payment_sanitized;

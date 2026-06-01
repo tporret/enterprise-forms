@@ -22,7 +22,7 @@ interface SubmitAttributes {
 }
 
 interface PaymentAttributes {
-	gateway: 'stripe';
+	gateway: 'stripe' | 'braintree' | 'paypal' | 'square';
 	amountSource: 'static' | 'field';
 	amount: string;
 	amountField: string;
@@ -172,6 +172,9 @@ const ALLOWED_BLOCKS = [
 
 const PAYMENT_GATEWAY_LABELS: Record< PaymentAttributes['gateway'], string > = {
 	stripe: 'Stripe',
+	braintree: 'Braintree',
+	paypal: 'PayPal',
+	square: 'Square',
 };
 
 const useGatewayOptions = (): Array< { label: string; value: PaymentAttributes['gateway'] } > => {

@@ -3,7 +3,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
-type GatewaySlug = 'stripe';
+type GatewaySlug = 'stripe' | 'braintree' | 'paypal' | 'square';
 type StorageProviderSlug = 'local' | 's3' | 'r2' | 'gcs';
 
 interface GatewayState {
@@ -29,12 +29,33 @@ interface StorageSettingsResponse {
 	providers: Record< StorageProviderSlug, StorageProviderState >;
 }
 
-const GATEWAY_FIELDS: Record< GatewaySlug, Array< { key: string; label: string; secret?: boolean; placeholder?: string } > > = {
+const GATEWAY_FIELDS: Record< GatewaySlug, Array< { key: string; label: string; required?: boolean; secret?: boolean; placeholder?: string } > > = {
 	stripe: [
-		{ key: 'publishable_key', label: 'Publishable Key' },
-		{ key: 'secret_key', label: 'Secret Key', secret: true },
+		{ key: 'publishable_key', label: 'Publishable Key', required: true },
+		{ key: 'secret_key', label: 'Secret Key', required: true, secret: true },
+	],
+	braintree: [
+		{ key: 'environment', label: 'Environment', required: true },
+		{ key: 'merchant_id', label: 'Merchant ID', required: true },
+		{ key: 'public_key', label: 'Public Key', required: true },
+		{ key: 'private_key', label: 'Private Key', required: true, secret: true },
+	],
+	paypal: [
+		{ key: 'environment', label: 'Environment', required: true },
+		{ key: 'client_id', label: 'Client ID', required: true },
+		{ key: 'client_secret', label: 'Client Secret', required: true, secret: true },
+	],
+	square: [
+		{ key: 'environment', label: 'Environment', required: true },
+		{ key: 'application_id', label: 'Application ID', required: true },
+		{ key: 'location_id', label: 'Location ID', required: true },
+		{ key: 'access_token', label: 'Access Token', required: true, secret: true },
 	],
 };
+
+const BRAINTREE_ENVIRONMENTS = [ 'sandbox', 'production' ] as const;
+const PAYPAL_ENVIRONMENTS = [ 'sandbox', 'live' ] as const;
+const SQUARE_ENVIRONMENTS = [ 'sandbox', 'production' ] as const;
 
 const EMPTY_GATEWAYS = Object.keys( GATEWAY_FIELDS ).reduce( ( carry, gateway ) => {
 	carry[ gateway as GatewaySlug ] = { label: gateway, configured: false, fields: {} };
@@ -87,6 +108,25 @@ const buildDraftFromResponse = ( response: PaymentsSettingsResponse ): Record< G
 		nextDraft[ gateway ] = {};
 		GATEWAY_FIELDS[ gateway ].forEach( ( field ) => {
 			const value = response.gateways?.[ gateway ]?.fields?.[ field.key ];
+
+			if ( gateway === 'braintree' && field.key === 'environment' ) {
+				const envValue = typeof value === 'string' ? value.toLowerCase() : '';
+				nextDraft[ gateway ][ field.key ] = BRAINTREE_ENVIRONMENTS.includes( envValue as ( typeof BRAINTREE_ENVIRONMENTS )[ number ] ) ? envValue : '';
+				return;
+			}
+
+			if ( gateway === 'paypal' && field.key === 'environment' ) {
+				const envValue = typeof value === 'string' ? value.toLowerCase() : '';
+				nextDraft[ gateway ][ field.key ] = PAYPAL_ENVIRONMENTS.includes( envValue as ( typeof PAYPAL_ENVIRONMENTS )[ number ] ) ? envValue : '';
+				return;
+			}
+
+			if ( gateway === 'square' && field.key === 'environment' ) {
+				const envValue = typeof value === 'string' ? value.toLowerCase() : '';
+				nextDraft[ gateway ][ field.key ] = SQUARE_ENVIRONMENTS.includes( envValue as ( typeof SQUARE_ENVIRONMENTS )[ number ] ) ? envValue : '';
+				return;
+			}
+
 			nextDraft[ gateway ][ field.key ] = typeof value === 'string' ? value : '';
 		} );
 	} );
@@ -119,6 +159,7 @@ const SettingsPayments = (): JSX.Element => {
 	const [ isSavingStorage, setIsSavingStorage ] = useState( false );
 	const [ message, setMessage ] = useState< string | null >( null );
 	const [ error, setError ] = useState< string | null >( null );
+	const [ validationErrors, setValidationErrors ] = useState< Record< string, string > >( {} );
 	const [ storageMessage, setStorageMessage ] = useState< string | null >( null );
 	const [ storageError, setStorageError ] = useState< string | null >( null );
 
@@ -159,6 +200,8 @@ const SettingsPayments = (): JSX.Element => {
 	}, [] );
 
 	const updateDraft = ( gateway: GatewaySlug, field: string, value: string ): void => {
+		const fieldPath = `${ gateway }.${ field }`;
+
 		setDraft( ( current ) => ( {
 			...current,
 			[ gateway ]: {
@@ -166,6 +209,74 @@ const SettingsPayments = (): JSX.Element => {
 				[ field ]: value,
 			},
 		} ) );
+
+		setValidationErrors( ( current ) => {
+			if ( ! current[ fieldPath ] ) {
+				return current;
+			}
+
+			const nextErrors = { ...current };
+			delete nextErrors[ fieldPath ];
+			return nextErrors;
+		} );
+	};
+
+	const validatePaymentDraft = (): Record< string, string > => {
+		const nextErrors: Record< string, string > = {};
+
+		( Object.keys( GATEWAY_FIELDS ) as GatewaySlug[] ).forEach( ( gateway ) => {
+			const gatewayFields = GATEWAY_FIELDS[ gateway ];
+			const isGatewayInUse = Boolean( gateways[ gateway ]?.configured ) || gatewayFields.some( ( field ) => {
+				const value = draft[ gateway ]?.[ field.key ];
+				return typeof value === 'string' && value.trim() !== '';
+			} );
+
+			if ( ! isGatewayInUse ) {
+				return;
+			}
+
+			gatewayFields.forEach( ( field ) => {
+				if ( ! field.required ) {
+					return;
+				}
+
+				const value = draft[ gateway ]?.[ field.key ] || '';
+				const hasSavedSecret = Boolean( gateways[ gateway ]?.fields?.[ `has_${ field.key }` ] );
+				const hasValue = value.trim() !== '';
+
+				if ( field.secret && hasSavedSecret && ! hasValue ) {
+					return;
+				}
+
+				if ( ! hasValue ) {
+					nextErrors[ `${ gateway }.${ field.key }` ] = __( 'This field is required.', 'enterprise-forms' );
+					return;
+				}
+
+				if ( gateway === 'braintree' && field.key === 'environment' ) {
+					const normalized = value.toLowerCase();
+					if ( ! BRAINTREE_ENVIRONMENTS.includes( normalized as ( typeof BRAINTREE_ENVIRONMENTS )[ number ] ) ) {
+						nextErrors[ `${ gateway }.${ field.key }` ] = __( 'Choose a valid environment.', 'enterprise-forms' );
+					}
+				}
+
+				if ( gateway === 'paypal' && field.key === 'environment' ) {
+					const normalized = value.toLowerCase();
+					if ( ! PAYPAL_ENVIRONMENTS.includes( normalized as ( typeof PAYPAL_ENVIRONMENTS )[ number ] ) ) {
+						nextErrors[ `${ gateway }.${ field.key }` ] = __( 'Choose a valid environment.', 'enterprise-forms' );
+					}
+				}
+
+				if ( gateway === 'square' && field.key === 'environment' ) {
+					const normalized = value.toLowerCase();
+					if ( ! SQUARE_ENVIRONMENTS.includes( normalized as ( typeof SQUARE_ENVIRONMENTS )[ number ] ) ) {
+						nextErrors[ `${ gateway }.${ field.key }` ] = __( 'Choose a valid environment.', 'enterprise-forms' );
+					}
+				}
+			} );
+		} );
+
+		return nextErrors;
 	};
 
 	const updateStorageDraft = ( provider: StorageProviderSlug, field: string, value: string ): void => {
@@ -180,6 +291,15 @@ const SettingsPayments = (): JSX.Element => {
 
 	const saveSettings = async ( event: { preventDefault: () => void } ): Promise< void > => {
 		event.preventDefault();
+
+		const nextValidationErrors = validatePaymentDraft();
+		setValidationErrors( nextValidationErrors );
+		if ( Object.keys( nextValidationErrors ).length > 0 ) {
+			setMessage( null );
+			setError( __( 'Complete all required payment fields before saving.', 'enterprise-forms' ) );
+			return;
+		}
+
 		setIsSaving( true );
 		setMessage( null );
 		setError( null );
@@ -192,6 +312,7 @@ const SettingsPayments = (): JSX.Element => {
 			} );
 
 			setGateways( { ...EMPTY_GATEWAYS, ...response.gateways } );
+			setValidationErrors( {} );
 			setDraft( ( current ) => {
 				const nextDraft = { ...current };
 				( Object.keys( GATEWAY_FIELDS ) as GatewaySlug[] ).forEach( ( gateway ) => {
@@ -199,6 +320,11 @@ const SettingsPayments = (): JSX.Element => {
 					GATEWAY_FIELDS[ gateway ].forEach( ( field ) => {
 						if ( field.secret ) {
 							nextDraft[ gateway ][ field.key ] = '';
+						}
+
+						if ( ( gateway === 'braintree' || gateway === 'paypal' || gateway === 'square' ) && field.key === 'environment' ) {
+							const responseValue = response.gateways?.[ gateway ]?.fields?.[ field.key ];
+							nextDraft[ gateway ][ field.key ] = typeof responseValue === 'string' ? responseValue : '';
 						}
 					} );
 				} );
@@ -253,13 +379,13 @@ const SettingsPayments = (): JSX.Element => {
 		<section className="space-y-8 p-6 lg:p-10">
 			<div className="mb-6">
 				<h2 className="text-2xl font-semibold tracking-tight">{ __( 'Settings', 'enterprise-forms' ) }</h2>
-				<p className="mt-2 text-sm text-slate-600">{ __( 'Connect Stripe payments and file storage providers.', 'enterprise-forms' ) }</p>
+				<p className="mt-2 text-sm text-slate-600">{ __( 'Connect payment gateways and file storage providers.', 'enterprise-forms' ) }</p>
 			</div>
 
 			<form onSubmit={ ( event ) => void saveSettings( event ) } className="max-w-5xl rounded-lg border border-slate-200 bg-white p-6">
 				<div className="mb-5">
 					<h3 className="text-lg font-semibold text-slate-900">{ __( 'Payments', 'enterprise-forms' ) }</h3>
-					<p className="mt-1 text-sm text-slate-600">{ __( 'Connect Stripe for native checkout blocks.', 'enterprise-forms' ) }</p>
+					<p className="mt-1 text-sm text-slate-600">{ __( 'Connect Stripe, Braintree, PayPal, and Square for native checkout blocks.', 'enterprise-forms' ) }</p>
 				</div>
 				{ isLoading ? (
 					<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
@@ -275,21 +401,46 @@ const SettingsPayments = (): JSX.Element => {
 										</span>
 									</div>
 
+									{ gateway === 'square' && (
+										<p className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+											{ __( 'Square setup: find Application ID and Access Token in Square Developer Dashboard -> Applications -> Credentials, and Location ID in Square Dashboard -> Account & Settings -> Business -> Locations.', 'enterprise-forms' ) }
+										</p>
+									) }
+
 									<div className="space-y-4">
 										{ GATEWAY_FIELDS[ gateway ].map( ( field ) => {
 											const hasSavedSecret = Boolean( gateways[ gateway ]?.fields?.[ `has_${ field.key }` ] );
+											const fieldPath = `${ gateway }.${ field.key }`;
+											const fieldError = validationErrors[ fieldPath ];
+											const environmentOptions = field.key === 'environment'
+												? ( gateway === 'braintree' ? [ 'sandbox', 'production' ] : gateway === 'paypal' ? [ 'sandbox', 'live' ] : gateway === 'square' ? [ 'sandbox', 'production' ] : [] )
+												: [];
 
 											return (
 												<label key={ field.key } className="block text-sm font-medium text-slate-700">
-													<span>{ field.label }</span>
-													<input
-														type={ field.secret ? 'password' : 'text' }
-														value={ draft[ gateway ]?.[ field.key ] || '' }
-														onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
-														placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
-														className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-														autoComplete={ field.secret ? 'new-password' : 'off' }
-													/>
+													<span>{ field.label }{ field.required ? ' *' : '' }</span>
+													{ environmentOptions.length > 0 ? (
+														<select
+															value={ draft[ gateway ]?.[ field.key ] || '' }
+															onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
+															className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
+														>
+															<option value="">{ __( 'Select environment', 'enterprise-forms' ) }</option>
+															{ environmentOptions.map( ( option ) => (
+																<option key={ option } value={ option }>{ option.charAt( 0 ).toUpperCase() + option.slice( 1 ) }</option>
+															) ) }
+														</select>
+													) : (
+														<input
+															type={ field.secret ? 'password' : 'text' }
+															value={ draft[ gateway ]?.[ field.key ] || '' }
+															onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
+															placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
+															className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
+															autoComplete={ field.secret ? 'new-password' : 'off' }
+														/>
+													) }
+													{ fieldError && <span className="mt-1 block text-xs text-red-700">{ fieldError }</span> }
 												</label>
 											);
 										} ) }
@@ -306,7 +457,7 @@ const SettingsPayments = (): JSX.Element => {
 							disabled={ isSaving }
 							className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
 						>
-							{ isSaving ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Stripe Settings', 'enterprise-forms' ) }
+							{ isSaving ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Payment Settings', 'enterprise-forms' ) }
 						</button>
 					</>
 				) }

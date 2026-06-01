@@ -23,7 +23,7 @@ export interface FormField {
 	multiple?: boolean;
 	button_text?: string;
 	options?: string[];
-	gateway?: 'stripe';
+	gateway?: 'stripe' | 'braintree' | 'paypal' | 'square';
 	amount_source?: 'static' | 'field';
 	amount?: string;
 	amount_field?: string;

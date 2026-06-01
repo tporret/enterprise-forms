@@ -68,7 +68,7 @@ class EP_Installer {
 			record_id CHAR(36) NOT NULL,
 			gateway VARCHAR(50) NOT NULL,
 			intent_id VARCHAR(191) DEFAULT '' NOT NULL,
-			transaction_id VARCHAR(191) DEFAULT '' NOT NULL,
+			transaction_id VARCHAR(191) DEFAULT NULL,
 			form_id BIGINT(20) UNSIGNED NOT NULL,
 			schema_version VARCHAR(50) DEFAULT '' NOT NULL,
 			amount BIGINT(20) UNSIGNED NOT NULL,
@@ -88,10 +88,28 @@ class EP_Installer {
 		) {$charset_collate};";
 
 		dbDelta( $payments_sql );
+		self::normalize_payment_intents_table();
 
 		require_once __DIR__ . '/class-ep-cloud-storage.php';
 		\EP_Cloud_Storage::create_uploads_table();
 
 		update_option( 'ep_forms_db_version', '2.1.0', false );
+	}
+
+	public static function normalize_payment_intents_table(): void {
+		global $wpdb;
+
+		if ( ! $wpdb instanceof wpdb ) {
+			return;
+		}
+
+		$table_name = $wpdb->prefix . 'ep_payment_intents';
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		if ( $table_exists !== $table_name ) {
+			return;
+		}
+
+		$wpdb->query( "UPDATE {$table_name} SET transaction_id = NULL WHERE transaction_id = '' AND status <> 'paid'" );
+		$wpdb->query( "ALTER TABLE {$table_name} MODIFY transaction_id VARCHAR(191) NULL DEFAULT NULL" );
 	}
 }

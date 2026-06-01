@@ -31,6 +31,14 @@ class EP_Payment_Factory {
 				$instance = new EP_Gateway_Braintree( $credentials );
 				break;
 
+				case 'paypal':
+					$instance = new EP_Gateway_PayPal( $credentials );
+					break;
+
+				case 'square':
+					$instance = new EP_Gateway_Square( $credentials );
+					break;
+
 			default:
 				$instance = new EP_Gateway_Unsupported( $gateway );
 				break;

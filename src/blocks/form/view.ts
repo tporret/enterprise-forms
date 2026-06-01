@@ -25,7 +25,7 @@ interface FormContext {
 	redirectUrl: string;
 	hasTracked: boolean;
 	requiresPayment?: boolean;
-	paymentGateway?: 'stripe' | 'braintree' | 'authorize_net' | 'adyen' | 'square';
+	paymentGateway?: 'stripe' | 'braintree' | 'paypal' | 'authorize_net' | 'adyen' | 'square';
 	paymentClientConfig?: Record< string, string >;
 	stripePublishableKey?: string;
 	paymentReady?: boolean;
@@ -59,6 +59,8 @@ interface PaymentIntentResponse {
 	payment_record_id?: string;
 	client_secret?: string;
 	client_token?: string;
+	amount?: number;
+	currency?: string;
 	gateway?: string;
 	client_config?: Record< string, string >;
 	publishable_key?: string;
@@ -100,6 +102,43 @@ interface BraintreeWindow extends Window {
 	};
 }
 
+interface PayPalButtonsActions {
+	order: {
+		capture: () => Promise< { id?: string } >;
+	};
+}
+
+interface PayPalButtonsInstance {
+	render: ( selector: string | HTMLElement ) => Promise< void >;
+	close?: () => Promise< void >;
+}
+
+interface PayPalWindow extends Window {
+	paypal?: {
+		Buttons: ( config: {
+			createOrder: () => string | Promise< string >;
+			onApprove: ( data: { orderID?: string }, actions: PayPalButtonsActions ) => Promise< void >;
+			onError: ( error: Error ) => void;
+		} ) => PayPalButtonsInstance;
+	};
+}
+
+interface SquareCard {
+	attach: ( selector: string | HTMLElement ) => Promise< void >;
+	tokenize: () => Promise< { status: string; token?: string; errors?: Array< { message?: string } > } >;
+	destroy?: () => Promise< void >;
+}
+
+interface SquarePayments {
+	card: () => Promise< SquareCard >;
+}
+
+interface SquareWindow extends Window {
+	Square?: {
+		payments: ( applicationId: string, locationId: string ) => SquarePayments;
+	};
+}
+
 interface ValidationErrorResponse {
 	message?: string;
 	data?: {
@@ -128,10 +167,18 @@ const toStringValue = ( target: HTMLInputElement | HTMLTextAreaElement | HTMLSel
 
 let stripeScriptPromise: Promise< void > | null = null;
 let braintreeScriptPromise: Promise< void > | null = null;
+let paypalScriptPromise: Promise< void > | null = null;
+let paypalScriptKey = '';
+let squareScriptPromise: Promise< void > | null = null;
+let squareScriptEnvironment = '';
 let stripeInstance: StripeInstance | null = null;
 let stripeElements: StripeElements | null = null;
 let stripePaymentElement: StripePaymentElement | null = null;
 let braintreeDropin: BraintreeDropinInstance | null = null;
+let paypalButtons: PayPalButtonsInstance | null = null;
+let squareCard: SquareCard | null = null;
+let paypalOrderId = '';
+let paypalApprovedOrderId = '';
 let paymentClientSecret = '';
 let paymentClientToken = '';
 let paymentFingerprint = '';
@@ -139,6 +186,8 @@ let paymentGatewayFingerprint = '';
 
 const getStripeWindow = (): StripeWindow => window as StripeWindow;
 const getBraintreeWindow = (): BraintreeWindow => window as BraintreeWindow;
+const getPayPalWindow = (): PayPalWindow => window as PayPalWindow;
+const getSquareWindow = (): SquareWindow => window as SquareWindow;
 
 const loadScript = ( src: string, label: string ): Promise< void > => new Promise( ( resolve, reject ) => {
 	const existingScript = document.querySelector( `script[src="${ src }"]` );
@@ -183,6 +232,45 @@ const loadBraintreeScript = (): Promise< void > => {
 	return braintreeScriptPromise;
 };
 
+const loadPayPalScript = ( clientId: string, currency: string ): Promise< void > => {
+	const key = `${ clientId }:${ currency.toUpperCase() }`;
+
+	if ( getPayPalWindow().paypal && paypalScriptKey === key ) {
+		return Promise.resolve();
+	}
+
+	if ( paypalScriptPromise && paypalScriptKey === key ) {
+		return paypalScriptPromise;
+	}
+
+	paypalScriptKey = key;
+	paypalScriptPromise = loadScript(
+		`https://www.paypal.com/sdk/js?client-id=${ encodeURIComponent( clientId ) }&currency=${ encodeURIComponent( currency.toUpperCase() ) }&intent=capture`,
+		'PayPal'
+	);
+
+	return paypalScriptPromise;
+};
+
+const loadSquareScript = ( environment: string ): Promise< void > => {
+	const normalizedEnvironment = environment === 'production' ? 'production' : 'sandbox';
+	if ( getSquareWindow().Square && squareScriptEnvironment === normalizedEnvironment ) {
+		return Promise.resolve();
+	}
+
+	if ( squareScriptPromise && squareScriptEnvironment === normalizedEnvironment ) {
+		return squareScriptPromise;
+	}
+
+	squareScriptEnvironment = normalizedEnvironment;
+	squareScriptPromise = loadScript(
+		normalizedEnvironment === 'production' ? 'https://web.squarecdn.com/v1/square.js' : 'https://sandbox.web.squarecdn.com/v1/square.js',
+		'Square'
+	);
+
+	return squareScriptPromise;
+};
+
 const paymentValuesFingerprint = ( context: FormContext ): string => {
 	const values = { ...context.values };
 	delete values.payment_intent_id;
@@ -203,12 +291,12 @@ const fetchPaymentIntent = async ( context: FormContext, formElement: HTMLFormEl
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			'X-WP-Nonce': storeState.config.nonce || '',
 		},
 		body: JSON.stringify( {
 			form_id: formId,
 			schema_version: String( formData.get( 'schema_version' ) || '' ),
 			ep_forms_nonce: getFormNonce( formElement ),
+			ep_submission_token: String( formData.get( 'ep_submission_token' ) || '' ),
 			values: context.values,
 		} ),
 	} );
@@ -234,9 +322,21 @@ const resetPaymentUI = (): void => {
 		void braintreeDropin.teardown();
 	}
 
+	if ( paypalButtons?.close ) {
+		void paypalButtons.close();
+	}
+
+	if ( squareCard?.destroy ) {
+		void squareCard.destroy();
+	}
+
 	stripeElements = null;
 	stripePaymentElement = null;
 	braintreeDropin = null;
+	paypalButtons = null;
+	squareCard = null;
+	paypalOrderId = '';
+	paypalApprovedOrderId = '';
 	paymentClientSecret = '';
 	paymentClientToken = '';
 };
@@ -318,6 +418,67 @@ const mountPaymentUI = async ( context: FormContext, formElement: HTMLFormElemen
 			break;
 		}
 
+		case 'paypal': {
+				const clientId = context.paymentClientConfig?.client_id || intent.client_config?.client_id || '';
+				const orderId = intent.id || '';
+				const currency = String( intent.currency || 'usd' ).toUpperCase();
+				if ( ! clientId ) {
+					throw new Error( 'PayPal client ID is not configured.' );
+				}
+
+				if ( ! orderId ) {
+					throw new Error( 'PayPal did not return an order ID.' );
+				}
+
+				await loadPayPalScript( clientId, currency );
+				const paypal = getPayPalWindow().paypal;
+				if ( ! paypal?.Buttons ) {
+					throw new Error( 'PayPal could not be initialized.' );
+				}
+
+				paypalOrderId = orderId;
+				paypalApprovedOrderId = '';
+
+				paypalButtons = paypal.Buttons( {
+					createOrder: () => paypalOrderId,
+					onApprove: async ( data, actions ) => {
+						const capture = await actions.order.capture();
+						const approvedId = capture?.id || data?.orderID || paypalOrderId;
+						paypalApprovedOrderId = approvedId;
+						context.values.payment_intent_id = approvedId;
+					},
+					onError: ( error ) => {
+						throw error;
+					},
+				} );
+
+				const paypalMount = document.createElement( 'div' );
+				mountPoint.appendChild( paypalMount );
+				await paypalButtons.render( paypalMount );
+				break;
+			}
+
+		case 'square': {
+			const applicationId = context.paymentClientConfig?.application_id || intent.client_config?.application_id || '';
+			const locationId = context.paymentClientConfig?.location_id || intent.client_config?.location_id || '';
+			const environment = context.paymentClientConfig?.environment || intent.client_config?.environment || 'sandbox';
+
+			if ( ! applicationId || ! locationId ) {
+				throw new Error( 'Square application credentials are not configured.' );
+			}
+
+			await loadSquareScript( environment );
+			const square = getSquareWindow().Square;
+			if ( ! square?.payments ) {
+				throw new Error( 'Square could not be initialized.' );
+			}
+
+			const payments = square.payments( applicationId, locationId );
+			squareCard = await payments.card();
+			await squareCard.attach( mountPoint );
+			break;
+		}
+
 		default:
 			throw new Error( 'This payment gateway is not supported on the frontend yet.' );
 	}
@@ -330,7 +491,7 @@ const ensurePaymentElement = async ( context: FormContext, formElement: HTMLForm
 
 	const nextFingerprint = paymentValuesFingerprint( context );
 	const gateway = context.paymentGateway || 'stripe';
-	if ( nextFingerprint !== paymentFingerprint || gateway !== paymentGatewayFingerprint || ( gateway === 'stripe' && ! stripeElements ) || ( gateway === 'braintree' && ! braintreeDropin ) ) {
+	if ( nextFingerprint !== paymentFingerprint || gateway !== paymentGatewayFingerprint || ( gateway === 'stripe' && ! stripeElements ) || ( gateway === 'braintree' && ! braintreeDropin ) || ( gateway === 'paypal' && ! paypalButtons ) || ( gateway === 'square' && ! squareCard ) ) {
 		resetPaymentUI();
 		const intent = await fetchPaymentIntent( context, formElement );
 		await mountPaymentUI( context, formElement, intent );
@@ -384,6 +545,32 @@ const processGatewayPayment = async ( context: FormContext, formElement: HTMLFor
 			context.values.payment_intent_id = nonce;
 			return nonce;
 		}
+
+			case 'paypal': {
+				const approvedOrderId = context.values.payment_intent_id || paypalApprovedOrderId;
+				if ( ! approvedOrderId ) {
+					throw new Error( 'Complete PayPal approval before submitting the form.' );
+				}
+
+				context.values.payment_intent_id = approvedOrderId;
+				return approvedOrderId;
+			}
+
+			case 'square': {
+				if ( ! squareCard ) {
+					throw new Error( 'Square payment UI is not ready.' );
+				}
+
+				const tokenResult = await squareCard.tokenize();
+				if ( tokenResult.status !== 'OK' || ! tokenResult.token ) {
+					const firstError = tokenResult.errors?.[0]?.message;
+					throw new Error( firstError || 'Square did not return a payment token.' );
+				}
+
+				context.values.payment_token = tokenResult.token;
+				context.values.payment_intent_id = tokenResult.token;
+				return tokenResult.token;
+			}
 
 		default:
 			throw new Error( 'This payment gateway is not supported on the frontend yet.' );

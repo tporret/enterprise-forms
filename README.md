@@ -12,8 +12,8 @@ It is designed for teams that want native WordPress primitives on the backend, a
 - Submission handling over custom REST endpoints.
 - Encrypted entry payload storage.
 - File upload support using native WordPress media handling.
-- Native Stripe checkout block with server-side payment verification.
-- Stripe payment settings with non-Stripe providers hidden for V1.
+- Native payment checkout with Stripe, Braintree, PayPal, and Square adapters.
+- Encrypted payment credential storage with public client config exposure only where required.
 - Per-form notification settings with admin-email fallback.
 - Themeable frontend output with included `chameleon` and `itsm` themes.
 - Custom `ep_form` post type with REST support.
@@ -47,9 +47,11 @@ The builder currently includes these field blocks:
 - Node.js for asset builds
 - Composer for PHP autoloading in development
 
-Payment runtime dependencies are installed through Composer. The V1 checkout path uses:
+Payment runtime dependencies are installed through Composer. The checkout path uses:
 
 - `stripe/stripe-php` for Stripe PaymentIntents.
+- `braintree/braintree_php` for Braintree client tokens and transaction sale calls.
+- WordPress HTTP APIs for PayPal Orders and Square Payments requests.
 
 ## Installation
 
@@ -69,7 +71,7 @@ npm install
 npm run build
 ```
 
-`composer install` creates `vendor/autoload.php`, which is required for the Stripe SDK classes in development. Release zips include optimized Composer dependencies.
+`composer install` creates `vendor/autoload.php`, which is required for the Stripe and Braintree SDK classes in development. Release zips include optimized Composer dependencies.
 
 For active development:
 
@@ -91,7 +93,7 @@ npm run format
 1. Create a new form from the dashboard.
 2. Build the schema in the workstation using the included field blocks.
 3. Configure form theme and notification settings.
-4. Configure Stripe under **Settings > Payments** when the form needs checkout.
+4. Configure the selected gateway under **Settings > Payments** when the form needs checkout.
 5. Add the Payment Checkout block.
 6. Save the form schema to `ep_form_schema` post meta.
 7. Embed the form with the `enterprise-forms/renderer` block.
@@ -106,18 +108,35 @@ When using S3-compatible storage, configure the target bucket CORS policy to all
 
 ## Payments
 
-Enterprise Forms includes a narrow V1 Stripe checkout path backed by a payment adapter boundary so later providers can be added without rewriting submissions.
+Enterprise Forms includes a payment adapter boundary so each gateway can prepare browser checkout, verify or capture the payment server-side, and return a normalized payment record before an entry is stored.
 
 Current checkout behavior:
 
 - Stripe is fully wired through PaymentIntents, Stripe Elements, server-side amount validation, and payment verification before entry storage.
-- Braintree, Authorize.Net, Adyen, and Square are intentionally hidden from the admin UI and schema for V1.
-- Dormant adapter/dependency code may remain in the repository, but it is not part of the supported V1 checkout surface.
+- Braintree is wired through client token generation, Drop-in payment method nonces, server-side transaction sale calls, and verification before entry storage.
+- PayPal is wired through Orders, PayPal Buttons, client-side approval/capture, and server-side order verification before entry storage.
+- Square is wired through Web Payments SDK tokenization and server-side payment creation before entry storage.
+
+Gateway credential handling:
+
+- Secret credentials are encrypted before being stored in WordPress options.
+- Settings responses expose saved-state flags for secret fields, not the secret values themselves.
+- Frontend config only exposes public browser values such as Stripe publishable key, PayPal client ID, and Square application/location IDs.
+- Legacy plaintext Stripe secret options are migrated into encrypted gateway storage when read and encryption is configured.
+
+Square credential setup:
+
+- `application_id` comes from the Square Developer Dashboard application credentials.
+- `location_id` comes from the application's **Locations** section.
+- `access_token` comes from the same Square application credentials page; use sandbox credentials for sandbox mode and production credentials for production mode.
 
 Payment security rules:
 
 - The browser never sends the trusted amount.
 - The server calculates the payable amount from the saved form schema.
+- Public payment-intent preparation requires the form's public nonce and live submission token.
+- Local payment records are bound to the submission token and expire after one hour.
+- Unclaimed payment records keep a `NULL` transaction ID so multiple checkout attempts can exist safely, while claimed transactions remain unique per gateway to prevent replay.
 - A payment-required submission is rejected unless the selected gateway confirms payment success.
 - Stored entry payloads include payment metadata such as gateway, transaction ID, amount, currency, and receipt URL when available.
 
@@ -135,7 +154,9 @@ Payment security rules:
 - `inc/interface-ep-payment-gateway.php`: defines the payment gateway adapter contract.
 - `inc/class-ep-payment-factory.php`: resolves the configured gateway from schema and creates adapters.
 - `inc/class-ep-gateway-stripe.php`: Stripe PaymentIntent adapter.
-- `inc/class-ep-gateway-braintree.php`: dormant Braintree adapter kept out of the V1 admin/schema surface.
+- `inc/class-ep-gateway-braintree.php`: Braintree client-token, sale, and verification adapter.
+- `inc/class-ep-gateway-paypal.php`: PayPal Orders adapter.
+- `inc/class-ep-gateway-square.php`: Square Payments adapter.
 - `inc/Database.php`: manages the custom entries table and aggregate queries.
 - `inc/NotificationService.php`: resolves recipients and dispatches email notifications.
 - `inc/class-ep-theme-engine.php`: registers and injects frontend theme tokens.
@@ -153,6 +174,7 @@ Payment security rules:
 - Forms are stored as the custom post type `ep_form`.
 - Form schema is stored in the `ep_form_schema` post meta key.
 - Submissions are stored in the custom database table `wp_ep_entries` using the site prefix at runtime.
+- Payment setup and claim state is stored in `wp_ep_payment_intents` using the site prefix at runtime.
 - Entry payloads are encrypted before persistence.
 
 ## REST Surface
@@ -166,16 +188,16 @@ Key routes include:
 - `GET /stats` for dashboard metrics
 - `GET /forms/entry-counts` for per-form counts
 - `GET /notifications/statuses` for notification configuration state
-- `GET /payments/settings` for authenticated Stripe settings
-- `POST /payments/settings` for authenticated Stripe settings updates
-- `POST /payment-intent` for public payment intent or client-token preparation
+- `GET /payments/settings` for authenticated payment gateway settings
+- `POST /payments/settings` for authenticated payment gateway settings updates
+- `POST /payment-intent` for public payment intent, client-token, or order preparation
 
 ## Notes
 
 - The frontend renderer is a dynamic block, so displayed form output is generated from the saved schema.
 - Notifications can use explicitly configured recipients or fall back to the site admin email.
 - File uploads are stored as WordPress attachments.
-- Stripe credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
+- Payment credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
 - Admin entry access is restricted to privileged users.
 
 ## Release Packaging
