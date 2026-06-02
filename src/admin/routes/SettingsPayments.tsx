@@ -29,6 +29,11 @@ interface StorageSettingsResponse {
 	providers: Record< StorageProviderSlug, StorageProviderState >;
 }
 
+interface EncryptionNotice {
+	tone: 'success' | 'info' | 'warning';
+	message: string;
+}
+
 const GATEWAY_FIELDS: Record< GatewaySlug, Array< { key: string; label: string; required?: boolean; secret?: boolean; placeholder?: string } > > = {
 	stripe: [
 		{ key: 'publishable_key', label: 'Publishable Key', required: true },
@@ -148,12 +153,47 @@ const buildStorageDraftFromResponse = ( response: StorageSettingsResponse ): Rec
 	return nextDraft;
 };
 
+const getEncryptionNoticeFromQuery = (): EncryptionNotice | null => {
+	if ( typeof window === 'undefined' ) {
+		return null;
+	}
+
+	const searchParams = new URLSearchParams( window.location.search );
+	if ( searchParams.get( 'ep_forms_key_check' ) !== 'done' ) {
+		return null;
+	}
+
+	const status = searchParams.get( 'ep_forms_key_status' );
+	if ( status === 'primary' ) {
+		return {
+			tone: 'success',
+			message: __( 'Encryption key check complete. Enterprise Forms is configured using a wp-config or environment key.', 'enterprise-forms' ),
+		};
+	}
+
+	if ( status === 'fallback' ) {
+		return {
+			tone: 'info',
+			message: __( 'Encryption key check complete. Enterprise Forms is currently using the database fallback key.', 'enterprise-forms' ),
+		};
+	}
+
+	return {
+		tone: 'warning',
+		message: __( 'Encryption key check complete. A key is still missing, so submissions remain unavailable.', 'enterprise-forms' ),
+	};
+};
+
 const SettingsPayments = (): JSX.Element => {
 	const [ gateways, setGateways ] = useState< Record< GatewaySlug, GatewayState > >( EMPTY_GATEWAYS );
 	const [ draft, setDraft ] = useState< Record< GatewaySlug, Record< string, string > > >( {} as Record< GatewaySlug, Record< string, string > > );
 	const [ storageProviders, setStorageProviders ] = useState< Record< StorageProviderSlug, StorageProviderState > >( EMPTY_STORAGE_PROVIDERS );
 	const [ activeStorageProvider, setActiveStorageProvider ] = useState< StorageProviderSlug >( 'local' );
 	const [ storageDraft, setStorageDraft ] = useState< Record< StorageProviderSlug, Record< string, string > > >( {} as Record< StorageProviderSlug, Record< string, string > > );
+	const [ isOverviewOpen, setIsOverviewOpen ] = useState( true );
+	const [ isEncryptionOpen, setIsEncryptionOpen ] = useState( true );
+	const [ isPaymentsOpen, setIsPaymentsOpen ] = useState( true );
+	const [ isStorageOpen, setIsStorageOpen ] = useState( true );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ isSavingStorage, setIsSavingStorage ] = useState( false );
@@ -162,6 +202,18 @@ const SettingsPayments = (): JSX.Element => {
 	const [ validationErrors, setValidationErrors ] = useState< Record< string, string > >( {} );
 	const [ storageMessage, setStorageMessage ] = useState< string | null >( null );
 	const [ storageError, setStorageError ] = useState< string | null >( null );
+	const [ encryptionNotice ] = useState< EncryptionNotice | null >( () => getEncryptionNoticeFromQuery() );
+
+	const adminConfig = ( window as Window & {
+		enterpriseFormsAdminConfig?: {
+			encryption?: {
+				isConfigured?: boolean;
+				recheckUrl?: string;
+			};
+		};
+	} ).enterpriseFormsAdminConfig;
+	const isEncryptionConfigured = Boolean( adminConfig?.encryption?.isConfigured );
+	const encryptionRecheckUrl = adminConfig?.encryption?.recheckUrl || '#';
 
 	useEffect( () => {
 		let isCancelled = false;
@@ -377,177 +429,284 @@ const SettingsPayments = (): JSX.Element => {
 
 	return (
 		<section className="space-y-8 p-6 lg:p-10">
-			<div className="mb-6">
-				<h2 className="text-2xl font-semibold tracking-tight">{ __( 'Settings', 'enterprise-forms' ) }</h2>
-				<p className="mt-2 text-sm text-slate-600">{ __( 'Connect payment gateways and file storage providers.', 'enterprise-forms' ) }</p>
-			</div>
-
-			<form onSubmit={ ( event ) => void saveSettings( event ) } className="max-w-5xl rounded-lg border border-slate-200 bg-white p-6">
-				<div className="mb-5">
-					<h3 className="text-lg font-semibold text-slate-900">{ __( 'Payments', 'enterprise-forms' ) }</h3>
-					<p className="mt-1 text-sm text-slate-600">{ __( 'Connect Stripe, Braintree, PayPal, and Square for native checkout blocks.', 'enterprise-forms' ) }</p>
-				</div>
-				{ isLoading ? (
-					<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
-				) : (
-					<>
-						<div className="grid gap-5 lg:grid-cols-2">
-							{ ( Object.keys( GATEWAY_FIELDS ) as GatewaySlug[] ).map( ( gateway ) => (
-								<section key={ gateway } className="rounded-lg border border-slate-200 p-4">
-									<div className="mb-4 flex items-center justify-between gap-3">
-										<h3 className="text-base font-semibold text-slate-900">{ gateways[ gateway ]?.label || gateway }</h3>
-										<span className={ gateways[ gateway ]?.configured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-slate-500' }>
-											{ gateways[ gateway ]?.configured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
-										</span>
-									</div>
-
-									{ gateway === 'square' && (
-										<p className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-											{ __( 'Square setup: find Application ID and Access Token in Square Developer Dashboard -> Applications -> Credentials, and Location ID in Square Dashboard -> Account & Settings -> Business -> Locations.', 'enterprise-forms' ) }
-										</p>
-									) }
-
-									<div className="space-y-4">
-										{ GATEWAY_FIELDS[ gateway ].map( ( field ) => {
-											const hasSavedSecret = Boolean( gateways[ gateway ]?.fields?.[ `has_${ field.key }` ] );
-											const fieldPath = `${ gateway }.${ field.key }`;
-											const fieldError = validationErrors[ fieldPath ];
-											const environmentOptions = field.key === 'environment'
-												? ( gateway === 'braintree' ? [ 'sandbox', 'production' ] : gateway === 'paypal' ? [ 'sandbox', 'live' ] : gateway === 'square' ? [ 'sandbox', 'production' ] : [] )
-												: [];
-
-											return (
-												<label key={ field.key } className="block text-sm font-medium text-slate-700">
-													<span>{ field.label }{ field.required ? ' *' : '' }</span>
-													{ environmentOptions.length > 0 ? (
-														<select
-															value={ draft[ gateway ]?.[ field.key ] || '' }
-															onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
-															className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
-														>
-															<option value="">{ __( 'Select environment', 'enterprise-forms' ) }</option>
-															{ environmentOptions.map( ( option ) => (
-																<option key={ option } value={ option }>{ option.charAt( 0 ).toUpperCase() + option.slice( 1 ) }</option>
-															) ) }
-														</select>
-													) : (
-														<input
-															type={ field.secret ? 'password' : 'text' }
-															value={ draft[ gateway ]?.[ field.key ] || '' }
-															onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
-															placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
-															className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
-															autoComplete={ field.secret ? 'new-password' : 'off' }
-														/>
-													) }
-													{ fieldError && <span className="mt-1 block text-xs text-red-700">{ fieldError }</span> }
-												</label>
-											);
-										} ) }
-									</div>
-								</section>
-							) ) }
-						</div>
-
-						{ message && <p className="mt-4 text-sm text-green-700">{ message }</p> }
-						{ error && <p className="mt-4 text-sm text-red-700">{ error }</p> }
-
-						<button
-							type="submit"
-							disabled={ isSaving }
-							className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{ isSaving ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Payment Settings', 'enterprise-forms' ) }
-						</button>
-					</>
-				) }
-			</form>
-
-			<form onSubmit={ ( event ) => void saveStorageSettings( event ) } className="max-w-5xl rounded-lg border border-slate-200 bg-white p-6">
-				<div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsOverviewOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isOverviewOpen }
+				>
 					<div>
-						<div className="flex items-center gap-2">
-							<h3 className="text-lg font-semibold text-slate-900">{ __( 'File Storage', 'enterprise-forms' ) }</h3>
-							<Tooltip text={ __( 'S3-compatible uploads require bucket CORS for PUT requests from this site. Set Public Base URL when files should resolve through a CDN or public bucket URL.', 'enterprise-forms' ) }>
-								<button
-									type="button"
-									className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-600 hover:border-slate-500 hover:text-slate-900"
-									aria-label={ __( 'File storage requirements', 'enterprise-forms' ) }
-								>
-									?
-								</button>
-							</Tooltip>
-						</div>
-						<p className="mt-1 text-sm text-slate-600">{ __( 'Use local uploads or S3-compatible direct uploads for file fields.', 'enterprise-forms' ) }</p>
+						<h2 className="text-2xl font-semibold tracking-tight text-slate-900">{ __( 'Enterprise Forms Settings', 'enterprise-forms' ) }</h2>
+						<p className="mt-2 text-sm text-slate-600">{ __( 'Configure payments, file storage, and core plugin behavior.', 'enterprise-forms' ) }</p>
 					</div>
-					<label className="block min-w-56 text-sm font-medium text-slate-700">
-						<span>{ __( 'Active Provider', 'enterprise-forms' ) }</span>
-						<select
-							value={ activeStorageProvider }
-							onChange={ ( event ) => setActiveStorageProvider( event.target.value as StorageProviderSlug ) }
-							className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-						>
-							{ ( Object.keys( STORAGE_PROVIDER_FIELDS ) as StorageProviderSlug[] ).map( ( provider ) => (
-								<option key={ provider } value={ provider }>{ storageProviders[ provider ]?.label || provider }</option>
-							) ) }
-						</select>
-					</label>
-				</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isOverviewOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
 
-				{ isLoading ? (
-					<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
-				) : (
-					<>
-						<div className="grid gap-5 lg:grid-cols-2">
-							{ ( Object.keys( STORAGE_PROVIDER_FIELDS ) as StorageProviderSlug[] ).map( ( provider ) => (
-								<section key={ provider } className="rounded-lg border border-slate-200 p-4">
-									<div className="mb-4 flex items-center justify-between gap-3">
-										<h4 className="text-base font-semibold text-slate-900">{ storageProviders[ provider ]?.label || provider }</h4>
-										<span className={ storageProviders[ provider ]?.configured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-slate-500' }>
-											{ storageProviders[ provider ]?.configured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
-										</span>
-									</div>
+				{ isOverviewOpen && (
+					<div className="border-t border-slate-200 px-6 py-5">
+						<p className="text-sm text-slate-600">{ __( 'Use the sections below to connect payment gateways and configure how uploaded files are stored.', 'enterprise-forms' ) }</p>
+					</div>
+				) }
+			</section>
 
-									{ STORAGE_PROVIDER_FIELDS[ provider ].length === 0 ? (
-										<p className="text-sm text-slate-600">{ __( 'Stores files in the WordPress uploads directory.', 'enterprise-forms' ) }</p>
-									) : (
-										<div className="space-y-4">
-											{ STORAGE_PROVIDER_FIELDS[ provider ].map( ( field ) => {
-												const hasSavedSecret = Boolean( storageProviders[ provider ]?.fields?.[ `has_${ field.key }` ] );
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsEncryptionOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isEncryptionOpen }
+				>
+					<div>
+						<h3 className="text-lg font-semibold text-slate-900">{ __( 'Encryption Key', 'enterprise-forms' ) }</h3>
+						<p className="mt-1 text-sm text-slate-600">{ __( 'Verify that submissions can be encrypted before forms go live.', 'enterprise-forms' ) }</p>
+					</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isEncryptionOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
 
-												return (
-													<label key={ field.key } className="block text-sm font-medium text-slate-700">
-														<span>{ field.label }</span>
-														<input
-															type={ field.secret ? 'password' : 'text' }
-															value={ storageDraft[ provider ]?.[ field.key ] || '' }
-															onChange={ ( event ) => updateStorageDraft( provider, field.key, event.target.value ) }
-															placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
-															className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-															autoComplete={ field.secret ? 'new-password' : 'off' }
-														/>
-													</label>
-												);
-											} ) }
-										</div>
-									) }
-								</section>
-							) ) }
+				{ isEncryptionOpen && (
+					<div className="border-t border-slate-200 px-6 py-6">
+						{ encryptionNotice && (
+							<p
+								className={ `mb-4 rounded-md px-3 py-2 text-sm ${
+									encryptionNotice.tone === 'success'
+										? 'bg-green-50 text-green-800'
+										: encryptionNotice.tone === 'info'
+										? 'bg-sky-50 text-sky-800'
+										: 'bg-amber-50 text-amber-800'
+								}` }
+							>
+								{ encryptionNotice.message }
+							</p>
+						) }
+
+						<div className="rounded-lg border border-slate-200 p-4">
+							<div className="mb-4 flex items-center justify-between gap-3">
+								<h4 className="text-base font-semibold text-slate-900">{ __( 'Encryption Status', 'enterprise-forms' ) }</h4>
+								<span className={ isEncryptionConfigured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-amber-700' }>
+									{ isEncryptionConfigured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
+								</span>
+							</div>
+
+							<p className="text-sm text-slate-700">
+								{ isEncryptionConfigured
+									? __( 'Encryption is configured. Submissions can be accepted.', 'enterprise-forms' )
+									: __( 'Encryption is not configured. Submissions are currently unavailable.', 'enterprise-forms' ) }
+							</p>
+							<p className="mt-2 text-sm text-slate-600">
+								{ __( 'After updating wp-config.php or environment variables, run a re-check to refresh Enterprise Forms key status.', 'enterprise-forms' ) }
+							</p>
+
+							<a
+								href={ encryptionRecheckUrl }
+								className="mt-4 inline-flex rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+							>
+								{ __( 'Re-check encryption key configuration', 'enterprise-forms' ) }
+							</a>
+						</div>
+					</div>
+				) }
+			</section>
+
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsPaymentsOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isPaymentsOpen }
+				>
+					<div>
+						<h3 className="text-lg font-semibold text-slate-900">{ __( 'Payments', 'enterprise-forms' ) }</h3>
+						<p className="mt-1 text-sm text-slate-600">{ __( 'Connect Stripe, Braintree, PayPal, and Square for native checkout blocks.', 'enterprise-forms' ) }</p>
+					</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isPaymentsOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
+
+				{ isPaymentsOpen && (
+					<form onSubmit={ ( event ) => void saveSettings( event ) } className="border-t border-slate-200 px-6 py-6">
+						{ isLoading ? (
+							<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
+						) : (
+							<>
+								<div className="grid gap-5 lg:grid-cols-2">
+									{ ( Object.keys( GATEWAY_FIELDS ) as GatewaySlug[] ).map( ( gateway ) => (
+										<section key={ gateway } className="rounded-lg border border-slate-200 p-4">
+											<div className="mb-4 flex items-center justify-between gap-3">
+												<h3 className="text-base font-semibold text-slate-900">{ gateways[ gateway ]?.label || gateway }</h3>
+												<span className={ gateways[ gateway ]?.configured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-slate-500' }>
+													{ gateways[ gateway ]?.configured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
+												</span>
+											</div>
+
+											{ gateway === 'square' && (
+												<p className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+													{ __( 'Square setup: find Application ID and Access Token in Square Developer Dashboard -> Applications -> Credentials, and Location ID in Square Dashboard -> Account & Settings -> Business -> Locations.', 'enterprise-forms' ) }
+												</p>
+											) }
+
+											<div className="space-y-4">
+												{ GATEWAY_FIELDS[ gateway ].map( ( field ) => {
+													const hasSavedSecret = Boolean( gateways[ gateway ]?.fields?.[ `has_${ field.key }` ] );
+													const fieldPath = `${ gateway }.${ field.key }`;
+													const fieldError = validationErrors[ fieldPath ];
+													const environmentOptions = field.key === 'environment'
+														? ( gateway === 'braintree' ? [ 'sandbox', 'production' ] : gateway === 'paypal' ? [ 'sandbox', 'live' ] : gateway === 'square' ? [ 'sandbox', 'production' ] : [] )
+														: [];
+
+													return (
+														<label key={ field.key } className="block text-sm font-medium text-slate-700">
+															<span>{ field.label }{ field.required ? ' *' : '' }</span>
+															{ environmentOptions.length > 0 ? (
+																<select
+																	value={ draft[ gateway ]?.[ field.key ] || '' }
+																	onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
+																	className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
+																>
+																	<option value="">{ __( 'Select environment', 'enterprise-forms' ) }</option>
+																	{ environmentOptions.map( ( option ) => (
+																		<option key={ option } value={ option }>{ option.charAt( 0 ).toUpperCase() + option.slice( 1 ) }</option>
+																	) ) }
+																</select>
+															) : (
+																<input
+																	type={ field.secret ? 'password' : 'text' }
+																	value={ draft[ gateway ]?.[ field.key ] || '' }
+																	onChange={ ( event ) => updateDraft( gateway, field.key, event.target.value ) }
+																	placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
+																	className={ `mt-1 w-full rounded-md px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 ${ fieldError ? 'border border-red-300 focus:border-red-500 focus:ring-red-500' : 'border border-slate-300 focus:border-slate-500 focus:ring-slate-500' }` }
+																	autoComplete={ field.secret ? 'new-password' : 'off' }
+																/>
+															) }
+															{ fieldError && <span className="mt-1 block text-xs text-red-700">{ fieldError }</span> }
+														</label>
+													);
+												} ) }
+											</div>
+										</section>
+									) ) }
+								</div>
+
+								{ message && <p className="mt-4 text-sm text-green-700">{ message }</p> }
+								{ error && <p className="mt-4 text-sm text-red-700">{ error }</p> }
+
+								<button
+									type="submit"
+									disabled={ isSaving }
+									className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{ isSaving ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Payment Settings', 'enterprise-forms' ) }
+								</button>
+							</>
+						) }
+					</form>
+				) }
+			</section>
+
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsStorageOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isStorageOpen }
+				>
+					<div className="flex items-center gap-2">
+						<h3 className="text-lg font-semibold text-slate-900">{ __( 'File Storage', 'enterprise-forms' ) }</h3>
+						<Tooltip text={ __( 'S3-compatible uploads require bucket CORS for PUT requests from this site. Set Public Base URL when files should resolve through a CDN or public bucket URL.', 'enterprise-forms' ) }>
+							<span
+								className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-600"
+								aria-label={ __( 'File storage requirements', 'enterprise-forms' ) }
+							>
+								?
+							</span>
+						</Tooltip>
+					</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isStorageOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
+
+				{ isStorageOpen && (
+					<form onSubmit={ ( event ) => void saveStorageSettings( event ) } className="border-t border-slate-200 px-6 py-6">
+						<div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+							<div>
+								<p className="mt-1 text-sm text-slate-600">{ __( 'Use local uploads or S3-compatible direct uploads for file fields.', 'enterprise-forms' ) }</p>
+							</div>
+							<label className="block min-w-56 text-sm font-medium text-slate-700">
+								<span>{ __( 'Active Provider', 'enterprise-forms' ) }</span>
+								<select
+									value={ activeStorageProvider }
+									onChange={ ( event ) => setActiveStorageProvider( event.target.value as StorageProviderSlug ) }
+									className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+								>
+									{ ( Object.keys( STORAGE_PROVIDER_FIELDS ) as StorageProviderSlug[] ).map( ( provider ) => (
+										<option key={ provider } value={ provider }>{ storageProviders[ provider ]?.label || provider }</option>
+									) ) }
+								</select>
+							</label>
 						</div>
 
-						{ storageMessage && <p className="mt-4 text-sm text-green-700">{ storageMessage }</p> }
-						{ storageError && <p className="mt-4 text-sm text-red-700">{ storageError }</p> }
+						{ isLoading ? (
+							<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
+						) : (
+							<>
+								<div className="grid gap-5 lg:grid-cols-2">
+									{ ( Object.keys( STORAGE_PROVIDER_FIELDS ) as StorageProviderSlug[] ).map( ( provider ) => (
+										<section key={ provider } className="rounded-lg border border-slate-200 p-4">
+											<div className="mb-4 flex items-center justify-between gap-3">
+												<h4 className="text-base font-semibold text-slate-900">{ storageProviders[ provider ]?.label || provider }</h4>
+												<span className={ storageProviders[ provider ]?.configured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-slate-500' }>
+													{ storageProviders[ provider ]?.configured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
+												</span>
+											</div>
 
-						<button
-							type="submit"
-							disabled={ isSavingStorage }
-							className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{ isSavingStorage ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save File Storage', 'enterprise-forms' ) }
-						</button>
-					</>
+											{ STORAGE_PROVIDER_FIELDS[ provider ].length === 0 ? (
+												<p className="text-sm text-slate-600">{ __( 'Stores files in the WordPress uploads directory.', 'enterprise-forms' ) }</p>
+											) : (
+												<div className="space-y-4">
+													{ STORAGE_PROVIDER_FIELDS[ provider ].map( ( field ) => {
+														const hasSavedSecret = Boolean( storageProviders[ provider ]?.fields?.[ `has_${ field.key }` ] );
+
+														return (
+															<label key={ field.key } className="block text-sm font-medium text-slate-700">
+																<span>{ field.label }</span>
+																<input
+																	type={ field.secret ? 'password' : 'text' }
+																	value={ storageDraft[ provider ]?.[ field.key ] || '' }
+																	onChange={ ( event ) => updateStorageDraft( provider, field.key, event.target.value ) }
+																	placeholder={ field.secret && hasSavedSecret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : field.placeholder || '' }
+																	className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+																	autoComplete={ field.secret ? 'new-password' : 'off' }
+																/>
+															</label>
+														);
+													} ) }
+												</div>
+											) }
+										</section>
+									) ) }
+								</div>
+
+								{ storageMessage && <p className="mt-4 text-sm text-green-700">{ storageMessage }</p> }
+								{ storageError && <p className="mt-4 text-sm text-red-700">{ storageError }</p> }
+
+								<button
+									type="submit"
+									disabled={ isSavingStorage }
+									className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{ isSavingStorage ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save File Storage', 'enterprise-forms' ) }
+								</button>
+							</>
+						) }
+					</form>
 				) }
-			</form>
+			</section>
 		</section>
 	);
 };

@@ -10,16 +10,29 @@ class EP_Crypto {
 	private const CIPHER = 'aes-256-gcm';
 	private const KEY_CONSTANT = 'EP_ENCRYPTION_KEY';
 	private const KEY_ID_CONSTANT = 'EP_ENCRYPTION_KEY_ID';
+	private const FALLBACK_KEY_OPTION = 'ep_forms_encryption_key_fallback';
+	private const FALLBACK_FLAG = 'EP_ALLOW_DB_ENCRYPTION_KEY_FALLBACK';
 	private const KEY_NOTICE_OPTION = 'ep_forms_encryption_key_notice';
+	private const RECHECK_ACTION = 'ep_forms_recheck_encryption_key';
 
 	public function init(): void {
 		add_action( 'admin_notices', [ $this, 'render_key_notice' ] );
+		add_action( 'admin_post_' . self::RECHECK_ACTION, [ $this, 'handle_recheck_key_action' ] );
 	}
 
 	/**
-	 * Ensure encryption key exists, attempting wp-config insertion first.
+	 * Ensure an encryption key exists from constant, environment, or optional fallback.
 	 */
 	public static function ensure_encryption_key(): void {
+		if ( self::has_encryption_key() ) {
+			delete_option( self::KEY_NOTICE_OPTION );
+			return;
+		}
+
+		if ( self::is_fallback_generation_enabled() ) {
+			self::ensure_fallback_key();
+		}
+
 		if ( self::has_encryption_key() ) {
 			delete_option( self::KEY_NOTICE_OPTION );
 			return;
@@ -30,6 +43,13 @@ class EP_Crypto {
 
 	public static function is_configured(): bool {
 		return self::has_encryption_key();
+	}
+
+	public static function get_recheck_action_url(): string {
+		return wp_nonce_url(
+			admin_url( 'admin-post.php?action=' . self::RECHECK_ACTION ),
+			self::RECHECK_ACTION
+		);
 	}
 
 	/**
@@ -111,21 +131,104 @@ class EP_Crypto {
 			return;
 		}
 
+		$this->render_recheck_result_notice();
+
+		if ( self::is_using_fallback_key() ) {
+			$fallback_message = sprintf(
+				/* translators: 1: encryption key define, 2: fallback feature flag define */
+				__( 'Enterprise Forms is using a database-stored fallback encryption key. For stronger security, set %1$s in wp-config.php or via environment and then disable %2$s after migrating.', 'enterprise-forms' ),
+				'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
+				'<code>define(\'' . self::FALLBACK_FLAG . '\', true);</code>'
+			);
+
+			echo '<div class="notice notice-info"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
+		}
+
 		$show_notice = (int) get_option( self::KEY_NOTICE_OPTION, 0 );
 		if ( 1 !== $show_notice ) {
 			return;
 		}
 
 		$message = sprintf(
-			/* translators: %s: encryption key define */
-			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %s to wp-config.php or provide it through the environment.', 'enterprise-forms' ),
-			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>'
+			/* translators: 1: encryption key define, 2: fallback feature flag define */
+			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %1$s to wp-config.php or provide it through the environment. If file-level config access is unavailable, you can temporarily enable a database fallback by setting %2$s and reactivating the plugin.', 'enterprise-forms' ),
+			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
+			'<code>define(\'' . self::FALLBACK_FLAG . '\', true);</code>'
 		);
 
-		echo '<div class="notice notice-warning"><p>' . wp_kses_post( $message ) . '</p></div>';
+		echo '<div class="notice notice-warning"><p>' . wp_kses_post( $message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
+	}
+
+	public function handle_recheck_key_action(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to manage Enterprise Forms encryption settings.', 'enterprise-forms' ) );
+		}
+
+		check_admin_referer( self::RECHECK_ACTION );
+
+		self::ensure_encryption_key();
+
+		$status = 'missing';
+		if ( self::has_primary_encryption_key() ) {
+			$status = 'primary';
+		} elseif ( self::has_fallback_encryption_key() ) {
+			$status = 'fallback';
+		}
+
+		$redirect_url = wp_get_referer();
+		if ( ! is_string( $redirect_url ) || '' === $redirect_url ) {
+			$redirect_url = admin_url();
+		}
+
+		$redirect_url = remove_query_arg( [ 'ep_forms_key_check', 'ep_forms_key_status' ], $redirect_url );
+		$redirect_url = add_query_arg(
+			[
+				'ep_forms_key_check'  => 'done',
+				'ep_forms_key_status' => $status,
+			],
+			$redirect_url
+		);
+
+		wp_safe_redirect( $redirect_url );
+		exit;
+	}
+
+	private function get_recheck_button_markup(): string {
+		$recheck_url = self::get_recheck_action_url();
+
+		return '<p><a class="button button-secondary" href="' . esc_url( $recheck_url ) . '">' . esc_html__( 'Re-check encryption key configuration', 'enterprise-forms' ) . '</a></p>';
+	}
+
+	private function render_recheck_result_notice(): void {
+		$key_check = isset( $_GET['ep_forms_key_check'] ) ? sanitize_key( wp_unslash( (string) $_GET['ep_forms_key_check'] ) ) : '';
+		if ( 'done' !== $key_check ) {
+			return;
+		}
+
+		$key_status = isset( $_GET['ep_forms_key_status'] ) ? sanitize_key( wp_unslash( (string) $_GET['ep_forms_key_status'] ) ) : 'missing';
+
+		if ( 'primary' === $key_status ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Encryption key check complete. Enterprise Forms is configured using a wp-config or environment key.', 'enterprise-forms' ) . '</p></div>';
+			return;
+		}
+
+		if ( 'fallback' === $key_status ) {
+			echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Encryption key check complete. Enterprise Forms is currently using the database fallback key.', 'enterprise-forms' ) . '</p></div>';
+			return;
+		}
+
+		echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Encryption key check complete. A key is still missing, so submissions remain unavailable.', 'enterprise-forms' ) . '</p></div>';
 	}
 
 	private static function has_encryption_key(): bool {
+		if ( self::has_primary_encryption_key() ) {
+			return true;
+		}
+
+		return self::has_fallback_encryption_key();
+	}
+
+	private static function has_primary_encryption_key(): bool {
 		if ( defined( self::KEY_CONSTANT ) && is_string( constant( self::KEY_CONSTANT ) ) && '' !== constant( self::KEY_CONSTANT ) ) {
 			return true;
 		}
@@ -133,6 +236,45 @@ class EP_Crypto {
 		$env_key = getenv( self::KEY_CONSTANT );
 
 		return is_string( $env_key ) && '' !== $env_key;
+	}
+
+	private static function has_fallback_encryption_key(): bool {
+		$fallback_key = get_option( self::FALLBACK_KEY_OPTION, '' );
+
+		return is_string( $fallback_key ) && '' !== $fallback_key;
+	}
+
+	private static function is_using_fallback_key(): bool {
+		return ! self::has_primary_encryption_key() && self::has_fallback_encryption_key();
+	}
+
+	private static function ensure_fallback_key(): void {
+		if ( self::has_fallback_encryption_key() ) {
+			return;
+		}
+
+		try {
+			$generated_key = base64_encode( random_bytes( 32 ) );
+		} catch ( Exception ) {
+			return;
+		}
+
+		update_option( self::FALLBACK_KEY_OPTION, $generated_key, false );
+	}
+
+	private static function is_fallback_generation_enabled(): bool {
+		if ( defined( self::FALLBACK_FLAG ) && true === constant( self::FALLBACK_FLAG ) ) {
+			return true;
+		}
+
+		$env_flag = getenv( self::FALLBACK_FLAG );
+		if ( ! is_string( $env_flag ) ) {
+			return false;
+		}
+
+		$normalized = strtolower( trim( $env_flag ) );
+
+		return in_array( $normalized, [ '1', 'true', 'yes', 'on' ], true );
 	}
 
 	/**
@@ -152,6 +294,11 @@ class EP_Crypto {
 		if ( '' === $raw_key ) {
 			$env_key = getenv( self::KEY_CONSTANT );
 			$raw_key = is_string( $env_key ) ? $env_key : '';
+		}
+
+		if ( '' === $raw_key ) {
+			$fallback_key = get_option( self::FALLBACK_KEY_OPTION, '' );
+			$raw_key = is_string( $fallback_key ) ? $fallback_key : '';
 		}
 
 		if ( '' === $raw_key ) {

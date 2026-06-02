@@ -87,6 +87,10 @@ class AdminBridge {
 				'enterpriseFormsAdminConfig',
 				[
 					'themes' => $theme_engine ? $theme_engine->get_registered_themes() : [],
+					'encryption' => [
+						'isConfigured' => class_exists( '\\EnterpriseForms\\EP_Crypto' ) ? EP_Crypto::is_configured() : false,
+						'recheckUrl' => class_exists( '\\EnterpriseForms\\EP_Crypto' ) ? EP_Crypto::get_recheck_action_url() : admin_url(),
+					],
 				]
 			);
 

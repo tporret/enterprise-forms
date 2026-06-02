@@ -89,6 +89,18 @@ npm run lint:css
 npm run format
 ```
 
+#### Permissions normalization
+
+If local edits are split across users (for example `terrencelp` and `www-data`), normalize repository ownership and modes with:
+
+```bash
+tools/normalize-perms.sh
+tools/normalize-perms.sh --apply
+sudo tools/normalize-perms.sh --apply --fix-owner --user terrencelp --group www-data
+```
+
+The script is dry-run by default and applies collaborative permissions (`2775` on directories, `775` on executable files, `664` on non-executable files).
+
 ## Usage Flow
 
 1. Create a new form from the dashboard.
