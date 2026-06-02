@@ -3,7 +3,7 @@ Contributors: terrencelp
 Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,13 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 
 == Changelog ==
 
+= 1.0.3 =
+
+* Added encryption key health checks and recovery controls in the plugin settings experience.
+* Improved encryption status visibility across admin notices and settings screens.
+* Updated admin settings UI and bridge wiring for more consistent crypto configuration handling.
+* Added a permissions normalization helper script for shared local development environments.
+
 = 1.0.2 =
 
 * Added Spam Prevention builder settings for per-form honeypot, rate limit, and duplicate submission windows.
@@ -161,6 +168,10 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.0.3 =
+
+Improves encryption key management and admin visibility for crypto configuration, and adds a local permissions normalization helper script.
 
 = 1.0.2 =
 
