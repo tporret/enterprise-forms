@@ -3,7 +3,7 @@ Contributors: terrencelp
 Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
-Stable tag: 1.0.3
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,12 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 
 == Changelog ==
 
+= 1.1.0 =
+
+* Minor version bump release.
+* Updated project documentation in README files.
+* Aligned plugin and package metadata version declarations.
+
 = 1.0.3 =
 
 * Added encryption key health checks and recovery controls in the plugin settings experience.
@@ -168,6 +174,10 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+
+Maintenance release that bumps Enterprise Forms to 1.1.0 and refreshes documentation/version metadata.
 
 = 1.0.3 =
 
