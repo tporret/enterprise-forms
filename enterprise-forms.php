@@ -96,6 +96,10 @@ class Plugin {
 	}
 
 	private function init_components(): void {
+		if ( class_exists( '\\EnterpriseForms\\EP_Installer' ) ) {
+			EP_Installer::init();
+		}
+
 		// Initialize the main core systems.
 		if ( class_exists( '\\EnterpriseForms\\PostTypes' ) ) {
 			( new PostTypes() )->init();

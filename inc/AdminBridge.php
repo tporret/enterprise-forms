@@ -87,10 +87,16 @@ class AdminBridge {
 				'enterpriseFormsAdminConfig',
 				[
 					'themes' => $theme_engine ? $theme_engine->get_registered_themes() : [],
-					'encryption' => [
-						'isConfigured' => class_exists( '\\EnterpriseForms\\EP_Crypto' ) ? EP_Crypto::is_configured() : false,
-						'recheckUrl' => class_exists( '\\EnterpriseForms\\EP_Crypto' ) ? EP_Crypto::get_recheck_action_url() : admin_url(),
-					],
+					'encryption' => class_exists( '\\EnterpriseForms\\EP_Crypto' )
+						? EP_Crypto::get_admin_config()
+						: [
+							'isConfigured'    => false,
+							'status'          => 'missing',
+							'usingFallback'   => false,
+							'recheckUrl'      => admin_url(),
+							'warningMessage'  => '',
+							'wpConfigSnippet' => '',
+						],
 				]
 			);
 

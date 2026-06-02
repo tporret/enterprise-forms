@@ -7,12 +7,14 @@ use wpdb;
  * Handles plugin install and database schema creation.
  */
 class EP_Installer {
+	public static function init(): void {
+		add_action( 'wp_initialize_site', [ __CLASS__, 'initialize_new_site' ], 10, 1 );
+	}
+
 	/**
 	 * Run install routines on plugin activation.
 	 */
 	public static function activate( bool $network_wide = false ): void {
-		EP_Crypto::ensure_encryption_key();
-
 		if ( is_multisite() && $network_wide ) {
 			$site_ids = get_sites(
 				[
@@ -22,13 +24,31 @@ class EP_Installer {
 
 			foreach ( $site_ids as $site_id ) {
 				switch_to_blog( (int) $site_id );
-				self::create_tables();
+				self::setup_current_site();
 				restore_current_blog();
 			}
 
 			return;
 		}
 
+		self::setup_current_site();
+	}
+
+	/**
+	 * Provision plugin storage and encryption state for a newly created multisite blog.
+	 */
+	public static function initialize_new_site( \WP_Site $new_site ): void {
+		if ( ! is_multisite() || 0 >= (int) $new_site->blog_id ) {
+			return;
+		}
+
+		switch_to_blog( (int) $new_site->blog_id );
+		self::setup_current_site();
+		restore_current_blog();
+	}
+
+	private static function setup_current_site(): void {
+		EP_Crypto::ensure_encryption_key();
 		self::create_tables();
 	}
 

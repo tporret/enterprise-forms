@@ -14,6 +14,9 @@ class EP_Crypto {
 	private const FALLBACK_FLAG = 'EP_ALLOW_DB_ENCRYPTION_KEY_FALLBACK';
 	private const KEY_NOTICE_OPTION = 'ep_forms_encryption_key_notice';
 	private const RECHECK_ACTION = 'ep_forms_recheck_encryption_key';
+	private const FALLBACK_OPTION_STATUS = 'fallback';
+	private const PRIMARY_OPTION_STATUS = 'primary';
+	private const MISSING_OPTION_STATUS = 'missing';
 
 	public function init(): void {
 		add_action( 'admin_notices', [ $this, 'render_key_notice' ] );
@@ -29,9 +32,7 @@ class EP_Crypto {
 			return;
 		}
 
-		if ( self::is_fallback_generation_enabled() ) {
-			self::ensure_fallback_key();
-		}
+		self::ensure_fallback_key();
 
 		if ( self::has_encryption_key() ) {
 			delete_option( self::KEY_NOTICE_OPTION );
@@ -50,6 +51,33 @@ class EP_Crypto {
 			admin_url( 'admin-post.php?action=' . self::RECHECK_ACTION ),
 			self::RECHECK_ACTION
 		);
+	}
+
+	/**
+	 * Build encryption configuration details for admin surfaces.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function get_admin_config(): array {
+		$status = self::current_key_status();
+
+		$config = [
+			'isConfigured'    => self::has_encryption_key(),
+			'status'          => $status,
+			'usingFallback'   => self::FALLBACK_OPTION_STATUS === $status,
+			'recheckUrl'      => self::get_recheck_action_url(),
+			'warningMessage'  => '',
+			'wpConfigSnippet' => '',
+		];
+
+		if ( self::FALLBACK_OPTION_STATUS === $status ) {
+			$config['warningMessage'] = __( 'Enterprise Forms generated and stored a unique encryption key in the database so submissions stay available. For stronger isolation, move this key into wp-config.php and then re-check the configuration.', 'enterprise-forms' );
+			$config['wpConfigSnippet'] = self::build_wp_config_snippet();
+		} elseif ( self::PRIMARY_OPTION_STATUS === $status ) {
+			$config['warningMessage'] = __( 'Enterprise Forms is already using a wp-config.php or environment key. Keep that key outside the database and back it up securely.', 'enterprise-forms' );
+		}
+
+		return $config;
 	}
 
 	/**
@@ -135,10 +163,9 @@ class EP_Crypto {
 
 		if ( self::is_using_fallback_key() ) {
 			$fallback_message = sprintf(
-				/* translators: 1: encryption key define, 2: fallback feature flag define */
-				__( 'Enterprise Forms is using a database-stored fallback encryption key. For stronger security, set %1$s in wp-config.php or via environment and then disable %2$s after migrating.', 'enterprise-forms' ),
+				/* translators: 1: encryption key define */
+				__( 'Enterprise Forms is using a database-stored fallback encryption key. For stronger security, move the generated key into %1$s or your environment and then re-check the configuration.', 'enterprise-forms' ),
 				'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
-				'<code>define(\'' . self::FALLBACK_FLAG . '\', true);</code>'
 			);
 
 			echo '<div class="notice notice-info"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
@@ -150,10 +177,9 @@ class EP_Crypto {
 		}
 
 		$message = sprintf(
-			/* translators: 1: encryption key define, 2: fallback feature flag define */
-			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %1$s to wp-config.php or provide it through the environment. If file-level config access is unavailable, you can temporarily enable a database fallback by setting %2$s and reactivating the plugin.', 'enterprise-forms' ),
+			/* translators: 1: encryption key define */
+			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %1$s to wp-config.php or provide it through the environment. If no primary key is available, Enterprise Forms will generate a unique database fallback key automatically.', 'enterprise-forms' ),
 			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
-			'<code>define(\'' . self::FALLBACK_FLAG . '\', true);</code>'
 		);
 
 		echo '<div class="notice notice-warning"><p>' . wp_kses_post( $message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
@@ -168,11 +194,11 @@ class EP_Crypto {
 
 		self::ensure_encryption_key();
 
-		$status = 'missing';
+		$status = self::MISSING_OPTION_STATUS;
 		if ( self::has_primary_encryption_key() ) {
-			$status = 'primary';
+			$status = self::PRIMARY_OPTION_STATUS;
 		} elseif ( self::has_fallback_encryption_key() ) {
-			$status = 'fallback';
+			$status = self::FALLBACK_OPTION_STATUS;
 		}
 
 		$redirect_url = wp_get_referer();
@@ -248,6 +274,18 @@ class EP_Crypto {
 		return ! self::has_primary_encryption_key() && self::has_fallback_encryption_key();
 	}
 
+	private static function current_key_status(): string {
+		if ( self::has_primary_encryption_key() ) {
+			return self::PRIMARY_OPTION_STATUS;
+		}
+
+		if ( self::has_fallback_encryption_key() ) {
+			return self::FALLBACK_OPTION_STATUS;
+		}
+
+		return self::MISSING_OPTION_STATUS;
+	}
+
 	private static function ensure_fallback_key(): void {
 		if ( self::has_fallback_encryption_key() ) {
 			return;
@@ -259,7 +297,7 @@ class EP_Crypto {
 			return;
 		}
 
-		update_option( self::FALLBACK_KEY_OPTION, $generated_key, false );
+		add_option( self::FALLBACK_KEY_OPTION, $generated_key, '', false );
 	}
 
 	private static function is_fallback_generation_enabled(): bool {
@@ -275,6 +313,15 @@ class EP_Crypto {
 		$normalized = strtolower( trim( $env_flag ) );
 
 		return in_array( $normalized, [ '1', 'true', 'yes', 'on' ], true );
+	}
+
+	private static function build_wp_config_snippet(): string {
+		$fallback_key = get_option( self::FALLBACK_KEY_OPTION, '' );
+		if ( ! is_string( $fallback_key ) || '' === $fallback_key ) {
+			return '';
+		}
+
+		return "define( '" . self::KEY_CONSTANT . "', '" . esc_js( $fallback_key ) . "' );\ndefine( '" . self::KEY_ID_CONSTANT . "', 'current' );";
 	}
 
 	/**

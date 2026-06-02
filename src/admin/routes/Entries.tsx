@@ -314,7 +314,7 @@ const Entries = (): JSX.Element => {
 		setEntriesError( null );
 
 		try {
-			const response = await apiFetch< Response >( {
+			const response = await apiFetch< Response, false >( {
 				path: `/enterprise-forms/v1/entries/${ resolvedId }/export${ params.toString() ? `?${ params.toString() }` : '' }`,
 				parse: false,
 			} );

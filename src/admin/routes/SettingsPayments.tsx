@@ -34,6 +34,15 @@ interface EncryptionNotice {
 	message: string;
 }
 
+interface EncryptionAdminConfig {
+	isConfigured?: boolean;
+	status?: 'primary' | 'fallback' | 'missing';
+	usingFallback?: boolean;
+	recheckUrl?: string;
+	warningMessage?: string;
+	wpConfigSnippet?: string;
+}
+
 const GATEWAY_FIELDS: Record< GatewaySlug, Array< { key: string; label: string; required?: boolean; secret?: boolean; placeholder?: string } > > = {
 	stripe: [
 		{ key: 'publishable_key', label: 'Publishable Key', required: true },
@@ -203,17 +212,20 @@ const SettingsPayments = (): JSX.Element => {
 	const [ storageMessage, setStorageMessage ] = useState< string | null >( null );
 	const [ storageError, setStorageError ] = useState< string | null >( null );
 	const [ encryptionNotice ] = useState< EncryptionNotice | null >( () => getEncryptionNoticeFromQuery() );
+	const [ snippetCopyMessage, setSnippetCopyMessage ] = useState< string | null >( null );
 
 	const adminConfig = ( window as Window & {
 		enterpriseFormsAdminConfig?: {
-			encryption?: {
-				isConfigured?: boolean;
-				recheckUrl?: string;
-			};
+			encryption?: EncryptionAdminConfig;
 		};
 	} ).enterpriseFormsAdminConfig;
-	const isEncryptionConfigured = Boolean( adminConfig?.encryption?.isConfigured );
-	const encryptionRecheckUrl = adminConfig?.encryption?.recheckUrl || '#';
+	const encryptionConfig = adminConfig?.encryption;
+	const isEncryptionConfigured = Boolean( encryptionConfig?.isConfigured );
+	const isUsingFallbackKey = Boolean( encryptionConfig?.usingFallback );
+	const encryptionStatus = encryptionConfig?.status || 'missing';
+	const encryptionRecheckUrl = encryptionConfig?.recheckUrl || '#';
+	const encryptionWarningMessage = encryptionConfig?.warningMessage || '';
+	const encryptionSnippet = encryptionConfig?.wpConfigSnippet || '';
 
 	useEffect( () => {
 		let isCancelled = false;
@@ -339,6 +351,19 @@ const SettingsPayments = (): JSX.Element => {
 				[ field ]: value,
 			},
 		} ) );
+	};
+
+	const copyWpConfigSnippet = async (): Promise< void > => {
+		if ( ! encryptionSnippet ) {
+			return;
+		}
+
+		try {
+			await navigator.clipboard.writeText( encryptionSnippet );
+			setSnippetCopyMessage( __( 'wp-config snippet copied. Paste it into wp-config.php, deploy, then run a re-check.', 'enterprise-forms' ) );
+		} catch {
+			setSnippetCopyMessage( __( 'Unable to copy automatically. Select the snippet below and copy it manually.', 'enterprise-forms' ) );
+		}
 	};
 
 	const saveSettings = async ( event: { preventDefault: () => void } ): Promise< void > => {
@@ -488,18 +513,49 @@ const SettingsPayments = (): JSX.Element => {
 							<div className="mb-4 flex items-center justify-between gap-3">
 								<h4 className="text-base font-semibold text-slate-900">{ __( 'Encryption Status', 'enterprise-forms' ) }</h4>
 								<span className={ isEncryptionConfigured ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-amber-700' }>
-									{ isEncryptionConfigured ? __( 'Configured', 'enterprise-forms' ) : __( 'Not configured', 'enterprise-forms' ) }
+									{ encryptionStatus === 'primary'
+										? __( 'wp-config or environment key', 'enterprise-forms' )
+										: encryptionStatus === 'fallback'
+										? __( 'Database fallback key', 'enterprise-forms' )
+										: __( 'Not configured', 'enterprise-forms' ) }
 								</span>
 							</div>
 
 							<p className="text-sm text-slate-700">
-								{ isEncryptionConfigured
-									? __( 'Encryption is configured. Submissions can be accepted.', 'enterprise-forms' )
+								{ encryptionStatus === 'primary'
+									? __( 'Submissions are encrypted using a key loaded outside the database. This is the recommended production setup.', 'enterprise-forms' )
+									: encryptionStatus === 'fallback'
+									? __( 'Submissions are protected, but the active key is stored in WordPress options on this site. Move it to wp-config.php for stronger isolation.', 'enterprise-forms' )
 									: __( 'Encryption is not configured. Submissions are currently unavailable.', 'enterprise-forms' ) }
 							</p>
+							{ encryptionWarningMessage && (
+								<p className={ `mt-3 rounded-md px-3 py-2 text-sm ${ isUsingFallbackKey ? 'bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700' }` }>
+									{ encryptionWarningMessage }
+								</p>
+							) }
 							<p className="mt-2 text-sm text-slate-600">
 								{ __( 'After updating wp-config.php or environment variables, run a re-check to refresh Enterprise Forms key status.', 'enterprise-forms' ) }
 							</p>
+
+							{ encryptionSnippet && (
+								<div className="mt-4 rounded-lg border border-slate-200 bg-slate-950 p-4 text-slate-100">
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<div>
+											<h5 className="text-sm font-semibold text-white">{ __( 'Move This Key To wp-config.php', 'enterprise-forms' ) }</h5>
+											<p className="mt-1 text-xs text-slate-300">{ __( 'This snippet reuses the current fallback key so existing encrypted entries remain readable after the move.', 'enterprise-forms' ) }</p>
+										</div>
+										<button
+											type="button"
+											onClick={ () => void copyWpConfigSnippet() }
+											className="inline-flex rounded-md border border-slate-600 px-3 py-2 text-xs font-semibold text-white transition hover:border-slate-400 hover:bg-slate-800"
+										>
+											{ __( 'Copy wp-config snippet', 'enterprise-forms' ) }
+										</button>
+									</div>
+									<pre className="mt-4 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 text-xs leading-6 text-slate-100">{ encryptionSnippet }</pre>
+									{ snippetCopyMessage && <p className="mt-3 text-xs text-slate-300">{ snippetCopyMessage }</p> }
+								</div>
+							)}
 
 							<a
 								href={ encryptionRecheckUrl }
