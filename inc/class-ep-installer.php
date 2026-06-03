@@ -49,6 +49,7 @@ class EP_Installer {
 
 	private static function setup_current_site(): void {
 		EP_Crypto::ensure_encryption_key();
+		EP_Crypto::mark_activation_notice_pending();
 		self::create_tables();
 	}
 

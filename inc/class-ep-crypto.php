@@ -13,6 +13,9 @@ class EP_Crypto {
 	private const FALLBACK_KEY_OPTION = 'ep_forms_encryption_key_fallback';
 	private const FALLBACK_FLAG = 'EP_ALLOW_DB_ENCRYPTION_KEY_FALLBACK';
 	private const KEY_NOTICE_OPTION = 'ep_forms_encryption_key_notice';
+	private const ACTIVATION_NOTICE_OPTION = 'ep_forms_show_activation_fallback_key_notice';
+	private const ACTIVATION_NOTICE_DISMISSED_META = 'ep_forms_activation_fallback_key_notice_dismissed';
+	private const DISMISS_ACTIVATION_NOTICE_ACTION = 'ep_forms_dismiss_activation_fallback_key_notice';
 	private const RECHECK_ACTION = 'ep_forms_recheck_encryption_key';
 	private const FALLBACK_OPTION_STATUS = 'fallback';
 	private const PRIMARY_OPTION_STATUS = 'primary';
@@ -21,6 +24,11 @@ class EP_Crypto {
 	public function init(): void {
 		add_action( 'admin_notices', [ $this, 'render_key_notice' ] );
 		add_action( 'admin_post_' . self::RECHECK_ACTION, [ $this, 'handle_recheck_key_action' ] );
+		add_action( 'admin_post_' . self::DISMISS_ACTIVATION_NOTICE_ACTION, [ $this, 'handle_dismiss_activation_notice' ] );
+	}
+
+	public static function mark_activation_notice_pending(): void {
+		update_option( self::ACTIVATION_NOTICE_OPTION, 1, false );
 	}
 
 	/**
@@ -159,30 +167,67 @@ class EP_Crypto {
 			return;
 		}
 
-		$this->render_recheck_result_notice();
-
-		if ( self::is_using_fallback_key() ) {
-			$fallback_message = sprintf(
-				/* translators: 1: encryption key define */
-				__( 'Enterprise Forms is using a database-stored fallback encryption key. For stronger security, move the generated key into %1$s or your environment and then re-check the configuration.', 'enterprise-forms' ),
-				'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
-			);
-
-			echo '<div class="notice notice-info"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
-		}
-
-		$show_notice = (int) get_option( self::KEY_NOTICE_OPTION, 0 );
-		if ( 1 !== $show_notice ) {
+		$show_activation_notice = (int) get_option( self::ACTIVATION_NOTICE_OPTION, 0 );
+		if ( 1 !== $show_activation_notice ) {
 			return;
 		}
 
-		$message = sprintf(
+		if ( ! self::is_using_fallback_key() ) {
+			delete_option( self::ACTIVATION_NOTICE_OPTION );
+			return;
+		}
+
+		$current_user_id = get_current_user_id();
+		if ( $current_user_id > 0 ) {
+			$dismissed = (int) get_user_meta( $current_user_id, self::ACTIVATION_NOTICE_DISMISSED_META, true );
+			if ( 1 === $dismissed ) {
+				return;
+			}
+		}
+
+		$fallback_message = sprintf(
 			/* translators: 1: encryption key define */
-			__( 'Enterprise Forms requires an encryption key before accepting submissions. Add %1$s to wp-config.php or provide it through the environment. If no primary key is available, Enterprise Forms will generate a unique database fallback key automatically.', 'enterprise-forms' ),
+			__( 'Enterprise Forms is using a database-stored fallback encryption key. For stronger security, move the generated key into %1$s or your environment and then re-check the configuration.', 'enterprise-forms' ),
 			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
 		);
 
-		echo '<div class="notice notice-warning"><p>' . wp_kses_post( $message ) . '</p>' . $this->get_recheck_button_markup() . '</div>';
+		echo '<div class="notice notice-info is-dismissible"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . $this->get_dismiss_activation_notice_button_markup() . '</div>';
+	}
+
+	public function handle_dismiss_activation_notice(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to manage Enterprise Forms encryption settings.', 'enterprise-forms' ) );
+		}
+
+		check_admin_referer( self::DISMISS_ACTIVATION_NOTICE_ACTION );
+
+		$current_user_id = get_current_user_id();
+		if ( $current_user_id > 0 ) {
+			update_user_meta( $current_user_id, self::ACTIVATION_NOTICE_DISMISSED_META, 1 );
+		}
+
+		$redirect_url = wp_get_referer();
+		if ( ! is_string( $redirect_url ) || '' === $redirect_url ) {
+			$redirect_url = admin_url();
+		}
+
+		wp_safe_redirect( $redirect_url );
+		exit;
+	}
+
+	private function get_dismiss_activation_notice_button_markup(): string {
+		$dismiss_url = wp_nonce_url(
+			admin_url( 'admin-post.php?action=' . self::DISMISS_ACTIVATION_NOTICE_ACTION ),
+			self::DISMISS_ACTIVATION_NOTICE_ACTION
+		);
+
+		return '<p><a class="button button-link" href="' . esc_url( $dismiss_url ) . '">' . esc_html__( 'Dismiss', 'enterprise-forms' ) . '</a></p>';
+	}
+
+	private function get_recheck_button_markup(): string {
+		$recheck_url = self::get_recheck_action_url();
+
+		return '<p><a class="button button-secondary" href="' . esc_url( $recheck_url ) . '">' . esc_html__( 'Re-check encryption key configuration', 'enterprise-forms' ) . '</a></p>';
 	}
 
 	public function handle_recheck_key_action(): void {
@@ -217,33 +262,6 @@ class EP_Crypto {
 
 		wp_safe_redirect( $redirect_url );
 		exit;
-	}
-
-	private function get_recheck_button_markup(): string {
-		$recheck_url = self::get_recheck_action_url();
-
-		return '<p><a class="button button-secondary" href="' . esc_url( $recheck_url ) . '">' . esc_html__( 'Re-check encryption key configuration', 'enterprise-forms' ) . '</a></p>';
-	}
-
-	private function render_recheck_result_notice(): void {
-		$key_check = isset( $_GET['ep_forms_key_check'] ) ? sanitize_key( wp_unslash( (string) $_GET['ep_forms_key_check'] ) ) : '';
-		if ( 'done' !== $key_check ) {
-			return;
-		}
-
-		$key_status = isset( $_GET['ep_forms_key_status'] ) ? sanitize_key( wp_unslash( (string) $_GET['ep_forms_key_status'] ) ) : 'missing';
-
-		if ( 'primary' === $key_status ) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Encryption key check complete. Enterprise Forms is configured using a wp-config or environment key.', 'enterprise-forms' ) . '</p></div>';
-			return;
-		}
-
-		if ( 'fallback' === $key_status ) {
-			echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Encryption key check complete. Enterprise Forms is currently using the database fallback key.', 'enterprise-forms' ) . '</p></div>';
-			return;
-		}
-
-		echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Encryption key check complete. A key is still missing, so submissions remain unavailable.', 'enterprise-forms' ) . '</p></div>';
 	}
 
 	private static function has_encryption_key(): bool {
