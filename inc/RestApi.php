@@ -109,6 +109,18 @@ class RestApi {
 			'callback'            => [ $this, 'get_health' ],
 			'permission_callback' => [ $this, 'check_admin_permissions' ],
 		] );
+
+		register_rest_route( 'enterprise-forms/v1', '/submission-context/(?P<form_id>\\d+)', [
+			'methods'             => 'GET',
+			'callback'            => [ $this, 'get_submission_context' ],
+			'permission_callback' => '__return_true',
+			'args'                => [
+				'form_id' => [
+					'required'          => true,
+					'sanitize_callback' => 'absint',
+				],
+			],
+		] );
 	}
 
 	public function check_admin_permissions(): bool {
@@ -440,6 +452,31 @@ class RestApi {
 		return rest_ensure_response( Observability::health() );
 	}
 
+	public function get_submission_context( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$form_id = absint( $request->get_param( 'form_id' ) );
+		$form_post = $form_id > 0 ? get_post( $form_id ) : null;
+
+		if ( ! $form_post || 'ep_form' !== $form_post->post_type ) {
+			return new \WP_Error(
+				'ep_forms_invalid_form',
+				__( 'Form not found.', 'enterprise-forms' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$submission_token = wp_generate_uuid4();
+		set_transient( $this->submission_token_key( $submission_token ), $form_id, 2 * HOUR_IN_SECONDS );
+
+		$response = rest_ensure_response( [
+			'form_id'             => $form_id,
+			'ep_forms_nonce'      => wp_create_nonce( 'ep_forms_public_submit' ),
+			'ep_submission_token' => $submission_token,
+		] );
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+
+		return $response;
+	}
+
 	/**
 	 * @param string[] $allowed_types
 	 */
@@ -467,6 +504,10 @@ class RestApi {
 		}
 
 		return true;
+	}
+
+	private function submission_token_key( string $token ): string {
+		return 'ep_submit_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
 	}
 
 	public function get_admin_stats(): \WP_REST_Response {

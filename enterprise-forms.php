@@ -3,7 +3,7 @@
  * Plugin Name:       Enterprise Forms
  * Plugin URI:        https://enterprise-forms.com
  * Description:       A disruptive, enterprise-grade WordPress form plugin featuring a full-screen React workstation. Zero bloat, API-first approach using WP Interactivity API.
- * Version:           1.1.0
+ * Version:           1.1.2
  * Requires at least: 6.5
  * Requires PHP:      8.2
  * Author:            tporret

@@ -101,6 +101,10 @@ const formatPaymentAmount = ( payment: PaymentLog | null ): string => {
 	return `${ isZeroDecimal ? String( amount ) : amount.toFixed( 2 ) } ${ currency }`;
 };
 
+const formatEntryStatus = ( status: string ): string => {
+	return status ? status.charAt( 0 ).toUpperCase() + status.slice( 1 ) : '--';
+};
+
 const getContactSummary = ( payload: Record< string, unknown > ): string => {
 	const flattened = flattenPayload( payload );
 	const email = flattened.find( ( [ key, value ] ) => /email/i.test( key ) && value.trim() !== '' )?.[ 1 ] || '';
@@ -206,6 +210,26 @@ const Entries = (): JSX.Element => {
 		() => entries.find( ( entry ) => entry.id === activeEntryId ) ?? null,
 		[ entries, activeEntryId ]
 	);
+
+	const updateEntryStatus = async ( entryId: number, status: 'read' | 'spam' | 'unread' ): Promise< void > => {
+		const response = await apiFetch< { id: number; status: string } >( {
+			path: `/enterprise-forms/v1/entries/${ entryId }/status`,
+			method: 'POST',
+			data: { status },
+		} );
+
+		setEntries( ( current ) => current.map( ( entry ) => ( entry.id === response.id ? { ...entry, status: response.status } : entry ) ) );
+	};
+
+	const handleViewDetails = ( entry: EntryRow ): void => {
+		setActiveEntryId( entry.id );
+
+		if ( entry.status === 'unread' ) {
+			void updateEntryStatus( entry.id, 'read' ).catch( () => {
+				// Keep the details pane usable even if the status update fails.
+			} );
+		}
+	};
 
 	useEffect( () => {
 		if ( resolvedId <= 0 ) {
@@ -544,11 +568,15 @@ const Entries = (): JSX.Element => {
 														</a>
 													) }
 												</td>
-												<td className="px-2 py-2 whitespace-nowrap text-slate-700">{ entry.status }</td>
+												<td className="px-2 py-2 whitespace-nowrap text-slate-700">
+													<span className={ `inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${ entry.status === 'unread' ? 'border-amber-200 bg-amber-50 text-amber-700' : entry.status === 'read' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600' }` }>
+														{ formatEntryStatus( entry.status ) }
+													</span>
+												</td>
 												<td className="px-2 py-2 whitespace-nowrap">
 													<button
 														type="button"
-														onClick={ () => setActiveEntryId( entry.id ) }
+														onClick={ () => handleViewDetails( entry ) }
 														className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
 													>
 														{ __( 'View details', 'enterprise-forms' ) }
@@ -585,9 +613,34 @@ const Entries = (): JSX.Element => {
 
 						{ activeEntry && (
 							<div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-								<div className="mb-2 flex items-center justify-between">
+								<div className="mb-4 flex items-center justify-between gap-2">
 									<h3 className="text-sm font-semibold text-slate-900">{ __( 'Entry details', 'enterprise-forms' ) }</h3>
-									<span className="font-mono text-[11px] text-slate-500">{ activeEntry.uuid }</span>
+									<div className="flex flex-wrap items-center gap-2">
+										<span className={ `inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${ activeEntry.status === 'unread' ? 'border-amber-200 bg-amber-50 text-amber-700' : activeEntry.status === 'read' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600' }` }>
+											{ formatEntryStatus( activeEntry.status ) }
+										</span>
+										<div className="flex items-center gap-1">
+											<button
+												type="button"
+												onClick={ () => void updateEntryStatus( activeEntry.id, 'unread' ) }
+												disabled={ activeEntry.status === 'unread' }
+												className="rounded border border-slate-300 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+												title={ __( 'Mark as unread', 'enterprise-forms' ) }
+											>
+												{ __( 'Unread', 'enterprise-forms' ) }
+											</button>
+											<button
+												type="button"
+												onClick={ () => void updateEntryStatus( activeEntry.id, 'spam' ) }
+												disabled={ activeEntry.status === 'spam' }
+												className="rounded border border-slate-300 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+												title={ __( 'Mark as spam', 'enterprise-forms' ) }
+											>
+												{ __( 'Spam', 'enterprise-forms' ) }
+											</button>
+										</div>
+										<span className="font-mono text-[11px] text-slate-500">{ activeEntry.uuid }</span>
+									</div>
 								</div>
 								<div className="grid gap-2 text-xs text-slate-700 md:grid-cols-2">
 									{ flattenPayload( activeEntry.payload ).map( ( [ key, value ] ) => (

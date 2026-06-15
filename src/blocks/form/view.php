@@ -120,6 +120,7 @@ wp_interactivity_state(
 		'config' => [
 			'restUrl'          => esc_url_raw( $endpoint ),
 			'paymentIntentUrl' => esc_url_raw( rest_url( 'enterprise-forms/v1/payment-intent' ) ),
+			'submissionContextUrl' => esc_url_raw( rest_url( 'enterprise-forms/v1/submission-context/' . $form_id ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
 		],
 	]

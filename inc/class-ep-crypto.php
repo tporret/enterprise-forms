@@ -55,10 +55,7 @@ class EP_Crypto {
 	}
 
 	public static function get_recheck_action_url(): string {
-		return wp_nonce_url(
-			admin_url( 'admin-post.php?action=' . self::RECHECK_ACTION ),
-			self::RECHECK_ACTION
-		);
+		return self::get_admin_post_action_url( self::RECHECK_ACTION );
 	}
 
 	/**
@@ -216,10 +213,7 @@ class EP_Crypto {
 	}
 
 	private function get_dismiss_activation_notice_button_markup(): string {
-		$dismiss_url = wp_nonce_url(
-			admin_url( 'admin-post.php?action=' . self::DISMISS_ACTIVATION_NOTICE_ACTION ),
-			self::DISMISS_ACTIVATION_NOTICE_ACTION
-		);
+		$dismiss_url = self::get_admin_post_action_url( self::DISMISS_ACTIVATION_NOTICE_ACTION );
 
 		return '<p><a class="button button-link" href="' . esc_url( $dismiss_url ) . '">' . esc_html__( 'Dismiss', 'enterprise-forms' ) . '</a></p>';
 	}
@@ -246,22 +240,27 @@ class EP_Crypto {
 			$status = self::FALLBACK_OPTION_STATUS;
 		}
 
-		$redirect_url = wp_get_referer();
-		if ( ! is_string( $redirect_url ) || '' === $redirect_url ) {
-			$redirect_url = admin_url();
-		}
-
-		$redirect_url = remove_query_arg( [ 'ep_forms_key_check', 'ep_forms_key_status' ], $redirect_url );
 		$redirect_url = add_query_arg(
 			[
 				'ep_forms_key_check'  => 'done',
 				'ep_forms_key_status' => $status,
 			],
-			$redirect_url
+			admin_url( 'admin.php?page=enterprise-forms' )
 		);
+		$redirect_url .= '#/settings';
 
 		wp_safe_redirect( $redirect_url );
 		exit;
+	}
+
+	private static function get_admin_post_action_url( string $action ): string {
+		return add_query_arg(
+			[
+				'action'    => $action,
+				'_wpnonce' => wp_create_nonce( $action ),
+			],
+			admin_url( 'admin-post.php' )
+		);
 	}
 
 	private static function has_encryption_key(): bool {

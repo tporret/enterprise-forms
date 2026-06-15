@@ -630,18 +630,23 @@ const SettingsSidebar = (): JSX.Element => {
 					value={ String( attrs.placeholder ?? '' ) }
 					onChange={ ( placeholder ) => updateAttribute( 'placeholder', placeholder ) }
 				/>
-				<ToggleControl
-					label={ __( 'Required', 'enterprise-forms' ) }
-					checked={ Boolean( attrs.required ) }
-					onChange={ ( required ) => updateAttribute( 'required', required ) }
-				/>
-				<Button
-					variant="secondary"
-					onClick={ removeSelectedField }
-					className="mt-2 border-red-200 text-red-700 hover:border-red-300 hover:text-red-800"
-				>
-					{ __( 'Remove Field', 'enterprise-forms' ) }
-				</Button>
+				<div className="mt-3">
+					<ToggleControl
+						label={ __( 'Required', 'enterprise-forms' ) }
+						checked={ Boolean( attrs.required ) }
+						onChange={ ( required ) => updateAttribute( 'required', required ) }
+					/>
+				</div>
+				<div className="mt-4 flex justify-end">
+					<Button
+						variant="secondary"
+						size="small"
+						onClick={ removeSelectedField }
+						className="border-red-200 text-red-700 hover:border-red-300 hover:text-red-800"
+					>
+						{ __( 'Remove Field', 'enterprise-forms' ) }
+					</Button>
+				</div>
 			</CardBody>
 		</Card>
 	);

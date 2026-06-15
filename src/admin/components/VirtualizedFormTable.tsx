@@ -51,33 +51,31 @@ const VirtualizedFormTable = ( { rows, isBusy, onDuplicate, onDelete }: Virtuali
 			<div ref={ parentRef } className="h-[560px] overflow-auto">
 				{ isBusy && rows.length === 0 ? (
 					<div className="flex h-full items-center justify-center">
-						<Spinner />
-					</div>
-				) : (
-					<div className="relative" style={ { height: `${ totalSize }px` } }>
-						{ virtualRows.map( ( virtualRow ) => {
-							const row = rows[ virtualRow.index ];
-							const badgeClass = row.notificationEnabled
-								? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-								: 'bg-slate-100 text-slate-600 border-slate-200';
-							return (
-								<div
-									key={ row.id }
+							<div
+								key={ row.id }
 								className="absolute left-0 top-0 grid w-full grid-cols-[2fr_1fr_1fr_2fr_1fr_1.3fr] gap-4 border-b border-slate-100 px-4 py-3 text-sm"
 								style={ { transform: `translateY(${ virtualRow.start }px)` } }
 							>
 								<span className="truncate font-medium text-slate-900" title={ row.title }>{ row.title }</span>
 								<span>{ formatStatus( row.status ) }</span>
-									<span>{ row.submissionCount }</span>
-									<div className="min-w-0">
-										<span className={ `inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${ badgeClass }` }>{ row.notificationLabel }</span>
-										<p className="mt-1 truncate text-xs text-slate-500" title={ row.notificationTransport }>{ row.notificationTransport }</p>
-									</div>
-									<span>{ formatDate( row.lastModified ) }</span>
-									<div className="flex gap-2">									<button
-										type="button"
-										onClick={ () => void navigate( `/builder/${ row.id }` ) }
-										className="rounded border border-green-600 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 transition hover:bg-green-600 hover:text-white"
+								<span>{ row.submissionCount }</span>
+								<div className="min-w-0">
+									<span className={ `inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${ badgeClass }` }>{ row.notificationLabel }</span>
+									<p className="mt-1 truncate text-xs text-slate-500" title={ row.notificationTransport }>{ row.notificationTransport }</p>
+								</div>
+								<span>{ formatDate( row.lastModified ) }</span>
+								<div className="flex flex-wrap items-center gap-2">
+									<Button size="small" variant="secondary" onClick={ () => void navigate( `/builder/${ row.id }` ) }>
+										{ __( 'Edit', 'enterprise-forms' ) }
+									</Button>
+									<Button size="small" variant="secondary" onClick={ () => onDuplicate( row.id ) }>
+										{ __( 'Duplicate', 'enterprise-forms' ) }
+									</Button>
+									<Button size="small" variant="secondary" isDestructive onClick={ () => onDelete( row.id ) }>
+										{ __( 'Delete', 'enterprise-forms' ) }
+									</Button>
+								</div>
+							</div>
 									>
 										{ __( 'Edit', 'enterprise-forms' ) }
 									</button>										<Button size="small" variant="secondary" onClick={ () => onDuplicate( row.id ) }>

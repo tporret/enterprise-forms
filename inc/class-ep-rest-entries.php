@@ -128,6 +128,50 @@ class EP_REST_Entries extends WP_REST_Controller {
 				],
 			]
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<entry_id>\\d+)/status',
+			[
+				[
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => [ $this, 'update_item_status' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => [
+						'entry_id' => [
+							'required'          => true,
+							'sanitize_callback' => 'absint',
+						],
+						'status'   => [
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_key',
+						],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<entry_id>\\d+)/status',
+			[
+				[
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => [ $this, 'update_entry_status' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => [
+						'entry_id' => [
+							'required'          => true,
+							'sanitize_callback' => 'absint',
+						],
+						'status' => [
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_key',
+						],
+					],
+				],
+			]
+		);
 	}
 
 	public function create_item_permissions_check( $request ): bool|WP_Error {
@@ -902,6 +946,147 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
 
 		return $response;
+	}
+
+	public function update_entry_status( $request ): WP_REST_Response|WP_Error {
+		global $wpdb;
+
+		$entry_id = absint( $request['entry_id'] );
+		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		$allowed_statuses = [ 'unread', 'read', 'spam' ];
+
+		if ( $entry_id <= 0 ) {
+			return new WP_Error(
+				'ep_forms_invalid_entry',
+				__( 'Invalid entry identifier.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( ! in_array( $status, $allowed_statuses, true ) ) {
+			return new WP_Error(
+				'ep_forms_invalid_status',
+				__( 'Invalid entry status.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$table_name = $wpdb->prefix . 'ep_entries';
+		$entry = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id, form_id, uuid, status, payload, created_at FROM {$table_name} WHERE id = %d LIMIT 1",
+				$entry_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $entry ) ) {
+			return new WP_Error(
+				'ep_forms_entry_not_found',
+				__( 'Entry not found.', 'enterprise-forms' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$updated = $wpdb->update(
+			$table_name,
+			[ 'status' => $status ],
+			[ 'id' => $entry_id ],
+			[ '%s' ],
+			[ '%d' ]
+		);
+
+		if ( false === $updated ) {
+			return new WP_Error(
+				'ep_forms_status_update_failed',
+				__( 'Unable to update entry status.', 'enterprise-forms' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		$this->upsert_entry_search_index(
+			$entry_id,
+			(int) $entry['form_id'],
+			$status,
+			(string) $entry['created_at'],
+			$this->decrypt_entry_payload( (string) $entry['payload'] )
+		);
+
+		return new WP_REST_Response(
+			[
+				'id' => $entry_id,
+				'form_id' => (int) $entry['form_id'],
+				'status' => $status,
+			],
+			200
+		);
+	}
+
+	public function update_item_status( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		global $wpdb;
+
+		$entry_id = absint( $request['entry_id'] );
+		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		$allowed_statuses = [ 'unread', 'read', 'spam' ];
+
+		if ( $entry_id <= 0 || ! in_array( $status, $allowed_statuses, true ) ) {
+			return new WP_Error(
+				'ep_forms_invalid_entry_status',
+				__( 'Invalid entry status.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$table_name = $wpdb->prefix . 'ep_entries';
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} WHERE id = %d LIMIT 1",
+				$entry_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $row ) ) {
+			return new WP_Error(
+				'ep_forms_entry_not_found',
+				__( 'Entry not found.', 'enterprise-forms' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$updated = $wpdb->update(
+			$table_name,
+			[ 'status' => $status ],
+			[ 'id' => $entry_id ],
+			[ '%s' ],
+			[ '%d' ]
+		);
+
+		if ( false === $updated ) {
+			return new WP_Error(
+				'ep_forms_entry_update_failed',
+				__( 'Unable to update the entry status.', 'enterprise-forms' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		$payload = $this->decrypt_entry_payload( (string) $row['payload'] );
+		$this->upsert_entry_search_index(
+			$entry_id,
+			(int) $row['form_id'],
+			$status,
+			(string) $row['created_at'],
+			$payload
+		);
+
+		$row['status'] = $status;
+
+		return new WP_REST_Response(
+			[
+				'item' => $this->prepare_entry_item( $row ),
+			],
+			200
+		);
 	}
 
 	/**

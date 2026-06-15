@@ -50,8 +50,14 @@ interface FormState {
 	config: {
 		restUrl: string;
 		paymentIntentUrl: string;
+		submissionContextUrl: string;
 		nonce: string;
 	};
+}
+
+interface SubmissionContextResponse {
+	ep_forms_nonce?: string;
+	ep_submission_token?: string;
 }
 
 interface PaymentIntentResponse {
@@ -283,7 +289,58 @@ const getFormNonce = ( formElement: HTMLFormElement ): string => {
 	return nonceInput?.value || '';
 };
 
+const getFormSubmissionToken = ( formElement: HTMLFormElement ): string => {
+	const tokenInput = formElement.querySelector( 'input[name="ep_submission_token"]' ) as HTMLInputElement | null;
+	return tokenInput?.value || '';
+};
+
+const upsertHiddenInput = ( formElement: HTMLFormElement, name: string, value: string ): void => {
+	let input = formElement.querySelector( `input[name="${ name }"]` ) as HTMLInputElement | null;
+	if ( ! input ) {
+		input = document.createElement( 'input' );
+		input.type = 'hidden';
+		input.name = name;
+		formElement.appendChild( input );
+	}
+
+	input.value = value;
+};
+
+const refreshSubmissionContext = async ( formElement: HTMLFormElement ): Promise< boolean > => {
+	const storeState = ( runtime as { state: FormState } ).state;
+	const formData = new FormData( formElement );
+	const formId = String( formData.get( 'form_id' ) || '' );
+	if ( ! formId ) {
+		return false;
+	}
+
+	const refreshUrl = storeState.config.submissionContextUrl || `/wp-json/enterprise-forms/v1/submission-context/${ encodeURIComponent( formId ) }`;
+	const response = await fetch( refreshUrl, {
+		method: 'GET',
+		credentials: 'same-origin',
+		cache: 'no-store',
+	} );
+
+	if ( ! response.ok ) {
+		return false;
+	}
+
+	const payload = await response.json() as SubmissionContextResponse;
+	const nextNonce = String( payload?.ep_forms_nonce || '' );
+	const nextSubmissionToken = String( payload?.ep_submission_token || '' );
+
+	if ( ! nextNonce || ! nextSubmissionToken ) {
+		return false;
+	}
+
+	upsertHiddenInput( formElement, 'ep_forms_nonce', nextNonce );
+	upsertHiddenInput( formElement, 'ep_submission_token', nextSubmissionToken );
+
+	return true;
+};
+
 const fetchPaymentIntent = async ( context: FormContext, formElement: HTMLFormElement ): Promise< PaymentIntentResponse > => {
+	await refreshSubmissionContext( formElement );
 	const formData = new FormData( formElement );
 	const storeState = ( runtime as { state: FormState } ).state;
 	const formId = String( formData.get( 'form_id' ) || '' );
@@ -296,7 +353,7 @@ const fetchPaymentIntent = async ( context: FormContext, formElement: HTMLFormEl
 			form_id: formId,
 			schema_version: String( formData.get( 'schema_version' ) || '' ),
 			ep_forms_nonce: getFormNonce( formElement ),
-			ep_submission_token: String( formData.get( 'ep_submission_token' ) || '' ),
+			ep_submission_token: getFormSubmissionToken( formElement ),
 			values: context.values,
 		} ),
 	} );
@@ -733,6 +790,7 @@ const runtime = store( 'enterpriseForms', {
 		config: {
 			restUrl: '',
 			paymentIntentUrl: '',
+			submissionContextUrl: '',
 			nonce: '',
 		},
 	},
@@ -803,6 +861,13 @@ const runtime = store( 'enterpriseForms', {
 			const submitUrl = storeState.config.restUrl || fallbackUrl;
 
 			try {
+				if ( ! context.requiresPayment ) {
+					yield refreshSubmissionContext( formElement );
+				}
+
+				formData.set( 'ep_forms_nonce', getFormNonce( formElement ) );
+				formData.set( 'ep_submission_token', getFormSubmissionToken( formElement ) );
+
 				if ( context.requiresPayment ) {
 					const paymentIntentId = yield processGatewayPayment( context, formElement );
 					context.values.payment_intent_id = paymentIntentId;
