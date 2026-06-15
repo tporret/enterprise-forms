@@ -59,6 +59,27 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.CHECKOUT_REF }}
 
+      - name: Guard against stale release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --no-tags --prune
+
+          if ! git show-ref --verify --quiet refs/remotes/origin/main; then
+            echo "::warning::Could not resolve origin/main; skipping stale tag guard."
+            exit 0
+          fi
+
+          TAG_COMMIT="$(git rev-parse HEAD)"
+          MAIN_COMMIT="$(git rev-parse refs/remotes/origin/main)"
+
+          if [ "${TAG_COMMIT}" != "${MAIN_COMMIT}" ] && git merge-base --is-ancestor "${TAG_COMMIT}" "${MAIN_COMMIT}"; then
+            BEHIND_COUNT="$(git rev-list --count "${TAG_COMMIT}..${MAIN_COMMIT}")"
+            echo "::error::Release tag ${TAG_NAME} points to ${TAG_COMMIT:0:7}, which is behind origin/main (${MAIN_COMMIT:0:7}) by ${BEHIND_COUNT} commit(s). Move the tag to the intended release commit (git tag -f ${TAG_NAME} <sha> && git push --force origin refs/tags/${TAG_NAME}) or create a new version tag."
+            exit 1
+          fi
+
       # ---------------------------------------------------------------
       # Point 5 — Plugin slug detection with override support.
       #
