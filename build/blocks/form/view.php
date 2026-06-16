@@ -10,6 +10,23 @@ use EnterpriseForms\EP_Theme_Engine;
 $attributes = is_array( $attributes ?? null ) ? $attributes : [];
 $form_id    = absint( $attributes['formId'] ?? 0 );
 
+$form_post_status = $form_id > 0 ? get_post_status( $form_id ) : '';
+$is_inactive_form = 'inactive' === $form_post_status;
+
+if ( $is_inactive_form ) {
+	$inactive_wrapper_attributes = get_block_wrapper_attributes(
+		[
+			'class'        => 'ep-form-container ep-form-container--inactive',
+			'data-form-id' => (string) $form_id,
+			'style'        => 'display:none',
+		]
+	);
+	?>
+	<div <?php echo $inactive_wrapper_attributes; ?> aria-hidden="true"></div>
+	<?php
+	return;
+}
+
 $schema_raw = $form_id > 0 ? get_post_meta( $form_id, 'ep_form_schema', true ) : '';
 $schema     = is_string( $schema_raw ) && '' !== trim( $schema_raw ) ? json_decode( $schema_raw, true ) : [];
 $schema     = is_array( $schema ) ? $schema : [];

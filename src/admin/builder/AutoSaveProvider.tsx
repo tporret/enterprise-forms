@@ -21,6 +21,14 @@ interface WpFormTitleResponse {
 	status?: string;
 }
 
+const normalizeFormStatus = ( status?: string ): FormPostStatus => {
+	if ( status === 'publish' || status === 'inactive' ) {
+		return status;
+	}
+
+	return 'draft';
+};
+
 const sanitizeText = ( value: string ): string => {
 	return value.replace( /<[^>]*>/g, '' ).trim();
 };
@@ -168,7 +176,7 @@ const AutoSaveProvider = ( { formId, blocks, children }: AutoSaveProviderProps )
 		} )
 			.then( ( form ) => {
 				const title = form.title?.raw ?? form.title?.rendered ?? '';
-				const status: FormPostStatus = form.status === 'publish' ? 'publish' : 'draft';
+				const status = normalizeFormStatus( form.status );
 				setFormTitle( title );
 				setFormStatus( status );
 				latestTitleRef.current = title;

@@ -7,6 +7,7 @@ namespace EnterpriseForms;
 class PostTypes {
 	public function init(): void {
 		add_action( 'init', [ $this, 'register_form_post_type' ] );
+		add_action( 'init', [ $this, 'register_form_post_status' ] );
 		add_action( 'init', [ $this, 'register_form_meta' ] );
 	}
 
@@ -31,6 +32,25 @@ class PostTypes {
 		];
 
 		register_post_type( 'ep_form', $args );
+	}
+
+	public function register_form_post_status(): void {
+		register_post_status( 'inactive', [
+			'label'                     => _x( 'Inactive', 'post status', 'enterprise-forms' ),
+			'label_count'               => _n_noop(
+				'Inactive <span class="count">(%s)</span>',
+				'Inactive <span class="count">(%s)</span>',
+				'enterprise-forms'
+			),
+			'public'                    => false,
+			'internal'                  => false,
+			'protected'                 => false,
+			'private'                   => false,
+			'exclude_from_search'       => true,
+			'show_in_admin_all_list'    => true,
+			'show_in_admin_status_list' => true,
+			'date_floating'             => false,
+		] );
 	}
 
 	public function register_form_meta(): void {

@@ -20,7 +20,15 @@ const formatDate = ( dateInput: string ): string => {
 };
 
 const formatStatus = ( status: string ): string => {
-	return status === 'publish' ? 'Published' : status === 'draft' ? 'Draft' : status;
+	if ( status === 'publish' ) {
+		return 'Published';
+	}
+
+	if ( status === 'inactive' ) {
+		return 'Inactive';
+	}
+
+	return status === 'draft' ? 'Draft' : status;
 };
 
 const VirtualizedFormTable = ( { rows, isBusy, onDuplicate, onDelete }: VirtualizedFormTableProps ): JSX.Element => {

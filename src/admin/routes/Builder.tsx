@@ -653,8 +653,9 @@ const Builder = (): JSX.Element => {
 											options={ [
 												{ label: __( 'Draft', 'enterprise-forms' ), value: 'draft' },
 												{ label: __( 'Published', 'enterprise-forms' ), value: 'publish' },
+												{ label: __( 'Inactive', 'enterprise-forms' ), value: 'inactive' },
 											] }
-											onChange={ ( status ) => setFormStatus( status === 'publish' ? 'publish' : 'draft' ) }
+											onChange={ ( status ) => setFormStatus( status === 'publish' || status === 'inactive' ? status : 'draft' ) }
 											help={ __( 'Controls whether this form appears in the frontend form picker.', 'enterprise-forms' ) }
 										/>
 									</CardBody>

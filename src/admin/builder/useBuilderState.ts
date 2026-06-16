@@ -3,7 +3,7 @@ import type { FormSchema } from './schemaTypes';
 import { createEmptySchema } from './schemaTypes';
 
 export type BuilderSaveState = 'idle' | 'saving' | 'saved' | 'error';
-export type FormPostStatus = 'draft' | 'publish';
+export type FormPostStatus = 'draft' | 'publish' | 'inactive';
 
 interface BuilderState {
 	formId: number;

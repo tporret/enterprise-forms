@@ -27,8 +27,9 @@ const Dashboard = (): JSX.Element => {
 	const stats = useMemo( () => {
 		const published = forms.filter( ( form ) => form.status === 'publish' ).length;
 		const drafts = forms.filter( ( form ) => form.status === 'draft' ).length;
+		const inactive = forms.filter( ( form ) => form.status === 'inactive' ).length;
 		const totalSubmissions = forms.reduce( ( sum, form ) => sum + form.submissionCount, 0 );
-		return { published, drafts, totalSubmissions };
+		return { published, drafts, inactive, totalSubmissions };
 	}, [ forms ] );
 
 	const handleDuplicate = async ( formId: number ): Promise<void> => {
@@ -83,8 +84,8 @@ const Dashboard = (): JSX.Element => {
 					<p className="mt-2 text-3xl font-semibold text-slate-900">{ forms.length }</p>
 				</div>
 				<div className="rounded-2xl border border-slate-200 bg-white p-5">
-					<p className="text-xs uppercase tracking-wide text-slate-500">{ __( 'Published / Draft', 'enterprise-forms' ) }</p>
-					<p className="mt-2 text-3xl font-semibold text-slate-900">{ stats.published } / { stats.drafts }</p>
+					<p className="text-xs uppercase tracking-wide text-slate-500">{ __( 'Published / Draft / Inactive', 'enterprise-forms' ) }</p>
+					<p className="mt-2 text-3xl font-semibold text-slate-900">{ stats.published } / { stats.drafts } / { stats.inactive }</p>
 				</div>
 				<div className="rounded-2xl border border-slate-200 bg-white p-5">
 					<p className="text-xs uppercase tracking-wide text-slate-500">{ __( 'Total Submissions', 'enterprise-forms' ) }</p>
