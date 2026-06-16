@@ -54,7 +54,7 @@ const VirtualizedFormTable = ( { rows, isBusy, onDuplicate, onDelete }: Virtuali
 						<Spinner />
 					</div>
 				) : (
-					<div style={ { height: `${ totalSize }px` } }>
+					<div className="relative" style={ { height: `${ totalSize }px` } }>
 						{ virtualRows.map( ( virtualRow ) => {
 							const row = rows[ virtualRow.index ];
 							const badgeClass = row.notificationEnabled
