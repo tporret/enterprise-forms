@@ -36,7 +36,7 @@ registerBlockType( 'enterprise-forms/renderer', {
 				per_page: -1,
 				orderby: 'title',
 				order: 'asc',
-				status: [ 'publish', 'draft', 'private' ],
+				status: [ 'publish' ],
 			} );
 		}, [] );
 

@@ -2,7 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useRef } from '@wordpress/element';
 import { SchemaParser } from './SchemaParser';
 import type { FormSchema } from './schemaTypes';
-import { useBuilderState } from './useBuilderState';
+import { useBuilderState, type FormPostStatus } from './useBuilderState';
 
 interface AutoSaveProviderProps {
 	formId: string;
@@ -18,6 +18,7 @@ interface WindowWithWpApiSettings extends Window {
 
 interface WpFormTitleResponse {
 	title?: { raw?: string; rendered?: string };
+	status?: string;
 }
 
 const sanitizeText = ( value: string ): string => {
@@ -129,11 +130,14 @@ const AutoSaveProvider = ( { formId, blocks, children }: AutoSaveProviderProps )
 	const setSaveState = useBuilderState( ( state ) => state.setSaveState );
 	const setError = useBuilderState( ( state ) => state.setError );
 	const formTitle = useBuilderState( ( state ) => state.formTitle );
+	const formStatus = useBuilderState( ( state ) => state.formStatus );
 	const schema = useBuilderState( ( state ) => state.schema );
 	const schemaSettings = useBuilderState( ( state ) => state.schema.settings );
 	const setFormTitle = useBuilderState( ( state ) => state.setFormTitle );
+	const setFormStatus = useBuilderState( ( state ) => state.setFormStatus );
 	const latestSchemaRef = useRef< FormSchema | null >( null );
 	const latestTitleRef = useRef< string >( '' );
+	const latestStatusRef = useRef< FormPostStatus >( 'draft' );
 
 	useEffect( () => {
 		setFormId( Number( formId ) || 0 );
@@ -155,24 +159,32 @@ const AutoSaveProvider = ( { formId, blocks, children }: AutoSaveProviderProps )
 		const resolvedFormId = Number( formId ) || 0;
 		if ( resolvedFormId <= 0 ) {
 			setFormTitle( '' );
+			setFormStatus( 'draft' );
 			return;
 		}
 
 		apiFetch< WpFormTitleResponse >( {
-			path: `/wp/v2/ep-forms/${ resolvedFormId }?context=edit&_fields=title`,
+			path: `/wp/v2/ep-forms/${ resolvedFormId }?context=edit&_fields=title,status`,
 		} )
 			.then( ( form ) => {
 				const title = form.title?.raw ?? form.title?.rendered ?? '';
+				const status: FormPostStatus = form.status === 'publish' ? 'publish' : 'draft';
 				setFormTitle( title );
+				setFormStatus( status );
 				latestTitleRef.current = title;
+				latestStatusRef.current = status;
 			} )
 			.catch( () => { /* silent — title stays as typed */ } );
-	}, [ formId, setFormTitle ] );
+	}, [ formId, setFormStatus, setFormTitle ] );
 
 	// Keep the title ref in sync so the debounced save always gets the latest value.
 	useEffect( () => {
 		latestTitleRef.current = formTitle;
 	}, [ formTitle ] );
+
+	useEffect( () => {
+		latestStatusRef.current = formStatus;
+	}, [ formStatus ] );
 
 	useEffect( () => {
 		const resolvedFormId = Number( formId ) || 0;
@@ -201,6 +213,7 @@ const AutoSaveProvider = ( { formId, blocks, children }: AutoSaveProviderProps )
 					},
 					data: {
 						title: latestTitleRef.current,
+						status: latestStatusRef.current,
 						meta: {
 							ep_form_schema: JSON.stringify( sanitizedSchema ),
 						},
@@ -218,7 +231,7 @@ const AutoSaveProvider = ( { formId, blocks, children }: AutoSaveProviderProps )
 		return () => {
 			window.clearTimeout( timer );
 		};
-	}, [ formId, schema, formTitle, setError, setSaveState ] );
+	}, [ formId, formStatus, schema, formTitle, setError, setSaveState ] );
 
 	return children;
 };

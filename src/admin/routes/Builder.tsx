@@ -2,6 +2,7 @@ import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { BlockEditorProvider } from '@wordpress/block-editor';
 import { createBlock } from '@wordpress/blocks';
+import { Card, CardBody, CardHeader, SelectControl } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useNavigate, useParams } from 'react-router-dom';
 import AutoSaveProvider from '../builder/AutoSaveProvider';
@@ -477,7 +478,9 @@ const Builder = (): JSX.Element => {
 	const saveState  = useBuilderState( ( state ) => state.saveState );
 	const saveError  = useBuilderState( ( state ) => state.error );
 	const formTitle  = useBuilderState( ( state ) => state.formTitle );
+	const formStatus = useBuilderState( ( state ) => state.formStatus );
 	const setFormTitle = useBuilderState( ( state ) => state.setFormTitle );
+	const setFormStatus = useBuilderState( ( state ) => state.setFormStatus );
 	const setSchema = useBuilderState( ( state ) => state.setSchema );
 	const builderSchema = useBuilderState( ( state ) => state.schema );
 
@@ -639,6 +642,23 @@ const Builder = (): JSX.Element => {
 						<div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
 							<Canvas formId={ formId ?? '0' } blocks={ blocks } onChangeBlocks={ setBlocks } />
 							<div className="space-y-4">
+								<Card>
+									<CardHeader>
+										<strong>{ __( 'Form Settings', 'enterprise-forms' ) }</strong>
+									</CardHeader>
+									<CardBody>
+										<SelectControl
+											label={ __( 'Form Status', 'enterprise-forms' ) }
+											value={ formStatus }
+											options={ [
+												{ label: __( 'Draft', 'enterprise-forms' ), value: 'draft' },
+												{ label: __( 'Published', 'enterprise-forms' ), value: 'publish' },
+											] }
+											onChange={ ( status ) => setFormStatus( status === 'publish' ? 'publish' : 'draft' ) }
+											help={ __( 'Controls whether this form appears in the frontend form picker.', 'enterprise-forms' ) }
+										/>
+									</CardBody>
+								</Card>
 							<SettingsSidebar />
 								<LogicBuilder
 									fields={ builderSchema.fields }

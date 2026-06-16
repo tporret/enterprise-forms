@@ -3,15 +3,18 @@ import type { FormSchema } from './schemaTypes';
 import { createEmptySchema } from './schemaTypes';
 
 export type BuilderSaveState = 'idle' | 'saving' | 'saved' | 'error';
+export type FormPostStatus = 'draft' | 'publish';
 
 interface BuilderState {
 	formId: number;
 	formTitle: string;
+	formStatus: FormPostStatus;
 	schema: FormSchema;
 	saveState: BuilderSaveState;
 	error: string | null;
 	setFormId: ( formId: number ) => void;
 	setFormTitle: ( title: string ) => void;
+	setFormStatus: ( status: FormPostStatus ) => void;
 	setSchema: ( schema: FormSchema ) => void;
 	setTheme: ( theme: string ) => void;
 	setNotificationEnabled: ( enabled: boolean ) => void;
@@ -28,11 +31,13 @@ interface BuilderState {
 export const useBuilderState = create< BuilderState >( ( set ) => ( {
 	formId: 0,
 	formTitle: '',
+	formStatus: 'draft',
 	schema: createEmptySchema(),
 	saveState: 'idle',
 	error: null,
 	setFormId: ( formId ) => set( { formId } ),
 	setFormTitle: ( formTitle ) => set( { formTitle } ),
+	setFormStatus: ( formStatus ) => set( { formStatus } ),
 	setSchema: ( schema ) => set( { schema } ),
 	setTheme: ( theme ) => set( ( state ) => ( {
 		schema: {
