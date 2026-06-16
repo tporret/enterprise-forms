@@ -3,7 +3,7 @@ Contributors: terrencelp
 Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
-Stable tag: 1.1.3
+Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -130,6 +130,14 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 
 == Changelog ==
 
+= 1.1.4 =
+
+* Added form lifecycle support for an explicit Inactive status in the builder.
+* Added WordPress post status registration for `inactive` on `ep_form` posts.
+* Updated admin dashboard/table status labeling to include Inactive.
+* Updated frontend renderer behavior so inactive forms output hidden markup (`display:none`) and do not render active form UI.
+* Rebuilt admin and block assets with the latest status lifecycle changes.
+
 = 1.1.0 =
 
 * Minor version bump release.
@@ -174,6 +182,10 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.1.4 =
+
+Adds explicit Inactive form status handling and hides inactive forms at frontend render time.
 
 = 1.1.0 =
 
