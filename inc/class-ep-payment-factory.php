@@ -100,10 +100,18 @@ class EP_Gateway_Unsupported implements EP_Payment_Gateway {
 	public function initialize(): void {}
 
 	public function create_intent( int $amount, string $currency, array $meta ): array {
-		throw new Exception( sprintf( __( '%s payments are configured but are not implemented by this gateway adapter yet.', 'enterprise-forms' ), $this->gateway ) );
+		throw new Exception( sprintf(
+			/* translators: %s: payment gateway name. */
+			esc_html__( '%s payments are configured but are not implemented by this gateway adapter yet.', 'enterprise-forms' ),
+			esc_html( $this->gateway )
+		) );
 	}
 
 	public function verify_payment( string $transaction_id ): array {
-		throw new Exception( sprintf( __( '%s payment verification is not implemented by this gateway adapter yet.', 'enterprise-forms' ), $this->gateway ) );
+		throw new Exception( sprintf(
+			/* translators: %s: payment gateway name. */
+			esc_html__( '%s payment verification is not implemented by this gateway adapter yet.', 'enterprise-forms' ),
+			esc_html( $this->gateway )
+		) );
 	}
 }

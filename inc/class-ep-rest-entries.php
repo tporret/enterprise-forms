@@ -438,7 +438,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 
 				$attachment_id = media_handle_sideload( $file, $form_id );
 				if ( is_wp_error( $attachment_id ) ) {
-					throw new Exception( $attachment_id->get_error_message() );
+					throw new Exception( esc_html( $attachment_id->get_error_message() ) );
 				}
 
 				$attachment_url = wp_get_attachment_url( $attachment_id );
@@ -782,12 +782,10 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$normalized_search = strtolower( trim( $search ) );
 
 		if ( '' === $normalized_search ) {
-			$total_query = "SELECT COUNT(*) FROM {$table_name} {$where_sql}";
-			$total       = (int) $wpdb->get_var( $wpdb->prepare( $total_query, $args ) );
+			$total       = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} {$where_sql}", $args ) );
 
 			$data_args = array_merge( $args, [ $limit, $offset ] );
-			$data_query = "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC LIMIT %d OFFSET %d";
-			$rows       = $wpdb->get_results( $wpdb->prepare( $data_query, $data_args ), ARRAY_A );
+			$rows       = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
 
 			$items = [];
 			foreach ( (array) $rows as $row ) {
@@ -805,12 +803,10 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$search_args[] = $like_search;
 			$search_args[] = $like_search;
 
-			$total_query = "SELECT COUNT(*) FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where}";
-			$total = (int) $wpdb->get_var( $wpdb->prepare( $total_query, $search_args ) );
+			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where}", $search_args ) );
 
 			$data_args = array_merge( $search_args, [ $limit, $offset ] );
-			$data_query = "SELECT e.id, e.uuid, e.form_id, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC LIMIT %d OFFSET %d";
-			$rows = $wpdb->get_results( $wpdb->prepare( $data_query, $data_args ), ARRAY_A );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.form_id, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
 
 			$items = [];
 			foreach ( (array) $rows as $row ) {
@@ -856,8 +852,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		if ( '' === $normalized_search ) {
-			$query = "SELECT id, uuid, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC";
-			$rows  = $wpdb->get_results( $wpdb->prepare( $query, $args ), ARRAY_A );
+			$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC", $args ), ARRAY_A );
 		} else {
 			$search_table = $wpdb->prefix . 'ep_entry_search';
 			[ $search_where, $search_args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to, 'e' );
@@ -868,8 +863,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$search_args[] = $like_search;
 			$search_args[] = $like_search;
 
-			$query = "SELECT e.id, e.uuid, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC";
-			$rows = $wpdb->get_results( $wpdb->prepare( $query, $search_args ), ARRAY_A );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC", $search_args ), ARRAY_A );
 		}
 
 		$default_headers = [ 'entry_id', 'entry_uuid', 'status', 'created_at' ];

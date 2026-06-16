@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+if ( ! defined( 'ABSPATH' ) && 'cli' !== PHP_SAPI ) {
+	exit;
+}
+
 use EnterpriseForms\EP_REST_Entries;
 use EnterpriseForms\EP_REST_Payments;
 use EnterpriseForms\EP_Installer;

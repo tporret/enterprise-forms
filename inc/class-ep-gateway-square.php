@@ -17,7 +17,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 	public function initialize(): void {
 		foreach ( [ 'access_token', 'application_id', 'location_id' ] as $field ) {
 			if ( '' === (string) ( $this->credentials[ $field ] ?? '' ) ) {
-				throw new Exception( __( 'Square credentials are incomplete.', 'enterprise-forms' ) );
+				throw new Exception( esc_html__( 'Square credentials are incomplete.', 'enterprise-forms' ) );
 			}
 		}
 	}
@@ -43,7 +43,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 			]
 		);
 
-		$data = $this->decode_response( $response, __( 'Square payment lookup failed.', 'enterprise-forms' ) );
+		$data = $this->decode_response( $response, esc_html__( 'Square payment lookup failed.', 'enterprise-forms' ) );
 		$payment = isset( $data['payment'] ) && is_array( $data['payment'] ) ? $data['payment'] : [];
 
 		return $this->map_payment( $payment, [] );
@@ -80,7 +80,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 			]
 		);
 
-		$data = $this->decode_response( $response, __( 'Square payment creation failed.', 'enterprise-forms' ) );
+		$data = $this->decode_response( $response, esc_html__( 'Square payment creation failed.', 'enterprise-forms' ) );
 		$payment = isset( $data['payment'] ) && is_array( $data['payment'] ) ? $data['payment'] : [];
 
 		return $this->map_payment( $payment, $meta );
@@ -110,7 +110,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 	 */
 	private function decode_response( mixed $response, string $fallback_message ): array {
 		if ( is_wp_error( $response ) ) {
-			throw new Exception( $response->get_error_message() );
+			throw new Exception( esc_html( $response->get_error_message() ) );
 		}
 
 		$status = (int) wp_remote_retrieve_response_code( $response );
@@ -118,7 +118,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 		$data   = json_decode( $body, true );
 
 		if ( ! is_array( $data ) ) {
-			throw new Exception( __( 'Square returned an invalid response.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Square returned an invalid response.', 'enterprise-forms' ) );
 		}
 
 		if ( $status < 200 || $status >= 300 ) {
@@ -127,7 +127,7 @@ class EP_Gateway_Square implements EP_Payment_Gateway {
 				$message = sanitize_text_field( (string) ( $data['errors'][0]['detail'] ?? $data['errors'][0]['code'] ?? $fallback_message ) );
 			}
 
-			throw new Exception( $message );
+			throw new Exception( esc_html( $message ) );
 		}
 
 		return $data;

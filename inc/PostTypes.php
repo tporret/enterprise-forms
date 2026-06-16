@@ -38,6 +38,7 @@ class PostTypes {
 		register_post_status( 'inactive', [
 			'label'                     => _x( 'Inactive', 'post status', 'enterprise-forms' ),
 			'label_count'               => _n_noop(
+				/* translators: %s: number of inactive forms. */
 				'Inactive <span class="count">(%s)</span>',
 				'Inactive <span class="count">(%s)</span>',
 				'enterprise-forms'

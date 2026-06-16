@@ -19,7 +19,7 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 	public function initialize(): void {
 		foreach ( [ 'client_id', 'client_secret' ] as $field ) {
 			if ( '' === (string) ( $this->credentials[ $field ] ?? '' ) ) {
-				throw new Exception( __( 'PayPal credentials are incomplete.', 'enterprise-forms' ) );
+				throw new Exception( esc_html__( 'PayPal credentials are incomplete.', 'enterprise-forms' ) );
 			}
 		}
 	}
@@ -56,7 +56,7 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 			]
 		);
 
-		$data = $this->decode_response( $response, __( 'PayPal order creation failed.', 'enterprise-forms' ) );
+		$data = $this->decode_response( $response, esc_html__( 'PayPal order creation failed.', 'enterprise-forms' ) );
 
 		return [
 			'id'            => sanitize_text_field( (string) ( $data['id'] ?? '' ) ),
@@ -77,7 +77,7 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 			]
 		);
 
-		$data = $this->decode_response( $response, __( 'PayPal order lookup failed.', 'enterprise-forms' ) );
+		$data = $this->decode_response( $response, esc_html__( 'PayPal order lookup failed.', 'enterprise-forms' ) );
 
 		$purchase_units = isset( $data['purchase_units'] ) && is_array( $data['purchase_units'] ) ? $data['purchase_units'] : [];
 		$primary_unit   = isset( $purchase_units[0] ) && is_array( $purchase_units[0] ) ? $purchase_units[0] : [];
@@ -133,11 +133,11 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 			]
 		);
 
-		$data = $this->decode_response( $response, __( 'PayPal authentication failed.', 'enterprise-forms' ) );
+		$data = $this->decode_response( $response, esc_html__( 'PayPal authentication failed.', 'enterprise-forms' ) );
 
 		$token = sanitize_text_field( (string) ( $data['access_token'] ?? '' ) );
 		if ( '' === $token ) {
-			throw new Exception( __( 'PayPal did not return an access token.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'PayPal did not return an access token.', 'enterprise-forms' ) );
 		}
 
 		$expires_in = max( 60, (int) ( $data['expires_in'] ?? 300 ) );
@@ -168,7 +168,7 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 	 */
 	private function decode_response( mixed $response, string $fallback_message ): array {
 		if ( is_wp_error( $response ) ) {
-			throw new Exception( $response->get_error_message() );
+			throw new Exception( esc_html( $response->get_error_message() ) );
 		}
 
 		$status = (int) wp_remote_retrieve_response_code( $response );
@@ -176,12 +176,12 @@ class EP_Gateway_PayPal implements EP_Payment_Gateway {
 		$data   = json_decode( $body, true );
 
 		if ( ! is_array( $data ) ) {
-			throw new Exception( __( 'PayPal returned an invalid response.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'PayPal returned an invalid response.', 'enterprise-forms' ) );
 		}
 
 		if ( $status < 200 || $status >= 300 ) {
 			$message = sanitize_text_field( (string) ( $data['message'] ?? $data['error_description'] ?? $fallback_message ) );
-			throw new Exception( '' !== $message ? $message : $fallback_message );
+			throw new Exception( esc_html( '' !== $message ? $message : $fallback_message ) );
 		}
 
 		return $data;

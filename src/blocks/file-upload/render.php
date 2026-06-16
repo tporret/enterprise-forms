@@ -8,6 +8,10 @@
  * @var WP_Block $block Block object.
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 $label = isset( $attributes['label'] ) ? wp_kses_post( $attributes['label'] ) : __( 'Upload Files', 'enterprise-forms' );
 $name = isset( $attributes['name'] ) ? sanitize_key( $attributes['name'] ) : 'file_upload';
 $required = isset( $attributes['required'] ) ? (bool) $attributes['required'] : false;

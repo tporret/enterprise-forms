@@ -20,11 +20,11 @@ class EP_Validator {
 		$requested_schema_version = trim( $schema_version );
 
 		if ( '' !== $requested_schema_version && $requested_schema_version !== $resolved_schema_version ) {
-			throw new Exception( __( 'Schema version mismatch. Please refresh and try again.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Schema version mismatch. Please refresh and try again.', 'enterprise-forms' ) );
 		}
 
 		if ( empty( $schema['fields'] ) || ! is_array( $schema['fields'] ) ) {
-			throw new Exception( __( 'Invalid form schema: no fields available for validation.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Invalid form schema: no fields available for validation.', 'enterprise-forms' ) );
 		}
 
 		$errors    = [];
@@ -84,17 +84,17 @@ class EP_Validator {
 	 */
 	private function load_form_schema( int $form_id ): array {
 		if ( $form_id <= 0 ) {
-			throw new Exception( __( 'Invalid form ID.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Invalid form ID.', 'enterprise-forms' ) );
 		}
 
 		$schema_raw = get_post_meta( $form_id, 'ep_form_schema', true );
 		if ( ! is_string( $schema_raw ) || '' === trim( $schema_raw ) ) {
-			throw new Exception( __( 'Form schema is missing.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Form schema is missing.', 'enterprise-forms' ) );
 		}
 
 		$schema = json_decode( $schema_raw, true );
 		if ( ! is_array( $schema ) ) {
-			throw new Exception( __( 'Stored form schema is invalid JSON.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Stored form schema is invalid JSON.', 'enterprise-forms' ) );
 		}
 
 		return $schema;

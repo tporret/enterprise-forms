@@ -103,7 +103,7 @@ class EP_Crypto {
 		$tag = '';
 		$ciphertext = openssl_encrypt( $data, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv, $tag );
 		if ( false === $ciphertext ) {
-			throw new Exception( __( 'Failed to encrypt payload.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Failed to encrypt payload.', 'enterprise-forms' ) );
 		}
 
 		return 'ENCv2:' . $key_id . ':' . base64_encode( $iv . $tag . $ciphertext );
@@ -188,7 +188,7 @@ class EP_Crypto {
 			'<code>define(\'' . self::KEY_CONSTANT . '\', \'base64-encoded-32-byte-key\');</code>',
 		);
 
-		echo '<div class="notice notice-info is-dismissible"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . $this->get_dismiss_activation_notice_button_markup() . '</div>';
+		echo '<div class="notice notice-info is-dismissible"><p>' . wp_kses_post( $fallback_message ) . '</p>' . $this->get_recheck_button_markup() . $this->get_dismiss_activation_notice_button_markup() . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Button markup is escaped in helper methods.
 	}
 
 	public function handle_dismiss_activation_notice(): void {
@@ -366,7 +366,7 @@ class EP_Crypto {
 		}
 
 		if ( '' === $raw_key ) {
-			throw new Exception( __( 'Encryption key is not configured.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Encryption key is not configured.', 'enterprise-forms' ) );
 		}
 
 		$decoded = base64_decode( $raw_key, true );

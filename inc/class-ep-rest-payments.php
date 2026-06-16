@@ -310,22 +310,22 @@ class EP_REST_Payments extends WP_REST_Controller {
 	 */
 	private function load_form_schema( int $form_id ): array {
 		if ( $form_id <= 0 ) {
-			throw new Exception( __( 'Invalid form ID.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Invalid form ID.', 'enterprise-forms' ) );
 		}
 
 		$form = get_post( $form_id );
 		if ( ! $form || 'ep_form' !== $form->post_type ) {
-			throw new Exception( __( 'Form not found.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Form not found.', 'enterprise-forms' ) );
 		}
 
 		$schema_raw = get_post_meta( $form_id, 'ep_form_schema', true );
 		if ( ! is_string( $schema_raw ) || '' === trim( $schema_raw ) ) {
-			throw new Exception( __( 'Form schema is missing.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Form schema is missing.', 'enterprise-forms' ) );
 		}
 
 		$schema = json_decode( $schema_raw, true );
 		if ( ! is_array( $schema ) ) {
-			throw new Exception( __( 'Stored form schema is invalid JSON.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Stored form schema is invalid JSON.', 'enterprise-forms' ) );
 		}
 
 		return $schema;
@@ -410,7 +410,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 		);
 
 		if ( false === $inserted ) {
-			throw new Exception( __( 'Unable to save the local payment record.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Unable to save the local payment record.', 'enterprise-forms' ) );
 		}
 	}
 
@@ -633,7 +633,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 	private function calculate_payment_from_schema( array $schema, array $values ): array {
 		$payment_field = $this->find_payment_field( $schema );
 		if ( null === $payment_field ) {
-			throw new Exception( __( 'This form is not configured for payment.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'This form is not configured for payment.', 'enterprise-forms' ) );
 		}
 
 		$currency      = strtolower( sanitize_key( (string) ( $payment_field['currency'] ?? 'usd' ) ) );
@@ -645,7 +645,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 
 		$amount_minor = $this->to_minor_units( $amount_major, $currency );
 		if ( $amount_minor <= 0 ) {
-			throw new Exception( __( 'Payment amount must be greater than zero.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Payment amount must be greater than zero.', 'enterprise-forms' ) );
 		}
 
 		return [
@@ -664,7 +664,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 	private function resolve_mapped_amount( array $payment_field, array $schema, array $values ): float {
 		$amount_field_key = sanitize_key( (string) ( $payment_field['amount_field'] ?? '' ) );
 		if ( '' === $amount_field_key ) {
-			throw new Exception( __( 'Payment amount field is not configured.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Payment amount field is not configured.', 'enterprise-forms' ) );
 		}
 
 		$source_field = null;
@@ -678,7 +678,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 		}
 
 		if ( ! is_array( $source_field ) ) {
-			throw new Exception( __( 'Payment amount field could not be found in the saved schema.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Payment amount field could not be found in the saved schema.', 'enterprise-forms' ) );
 		}
 
 		$field_name = sanitize_key( (string) ( $source_field['name'] ?? $source_field['id'] ?? '' ) );
@@ -687,7 +687,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 
 		$options = isset( $source_field['options'] ) && is_array( $source_field['options'] ) ? $source_field['options'] : [];
 		if ( empty( $options ) ) {
-			throw new Exception( __( 'Mapped payment amounts must use a saved choice field.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Mapped payment amounts must use a saved choice field.', 'enterprise-forms' ) );
 		}
 
 		$allowed = [];
@@ -700,7 +700,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 		}
 
 		if ( ! in_array( $raw_value, $allowed, true ) ) {
-			throw new Exception( __( 'Payment amount selection is not allowed.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Payment amount selection is not allowed.', 'enterprise-forms' ) );
 		}
 
 		return $this->parse_major_amount( $raw_value );
@@ -713,7 +713,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 		$normalized = preg_replace( '/[^0-9\.\-]/', '', $value );
 		$normalized = is_string( $normalized ) ? $normalized : '';
 		if ( '' === $normalized || ! is_numeric( $normalized ) ) {
-			throw new Exception( __( 'Payment amount is not a valid number.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Payment amount is not a valid number.', 'enterprise-forms' ) );
 		}
 
 		return (float) $normalized;

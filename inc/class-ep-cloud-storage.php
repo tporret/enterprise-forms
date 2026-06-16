@@ -331,6 +331,7 @@ class EP_Cloud_Storage {
 			return new WP_Error(
 				'file_too_large',
 				sprintf(
+					/* translators: %s: maximum allowed file size, for example 10 MB. */
 					__( 'File size exceeds maximum of %s.', 'enterprise-forms' ),
 					wp_convert_bytes_to_hr( $max_size )
 				)
@@ -349,6 +350,7 @@ class EP_Cloud_Storage {
 				return new WP_Error(
 					'file_type_not_allowed',
 					sprintf(
+						/* translators: %s: uploaded file extension. */
 						__( 'File type .%s is not allowed.', 'enterprise-forms' ),
 						esc_html( $file_extension )
 					)

@@ -16,7 +16,7 @@ class EP_Gateway_Stripe implements EP_Payment_Gateway {
 
 	public function initialize(): void {
 		if ( '' === $this->secret_key() ) {
-			throw new Exception( __( 'Stripe secret key is not configured.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Stripe secret key is not configured.', 'enterprise-forms' ) );
 		}
 	}
 
@@ -96,7 +96,7 @@ class EP_Gateway_Stripe implements EP_Payment_Gateway {
 	 */
 	private function decode_response( mixed $response ): array {
 		if ( is_wp_error( $response ) ) {
-			throw new Exception( $response->get_error_message() );
+			throw new Exception( esc_html( $response->get_error_message() ) );
 		}
 
 		$status = (int) wp_remote_retrieve_response_code( $response );
@@ -104,12 +104,12 @@ class EP_Gateway_Stripe implements EP_Payment_Gateway {
 		$data   = json_decode( $body, true );
 
 		if ( ! is_array( $data ) ) {
-			throw new Exception( __( 'Stripe returned an invalid response.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Stripe returned an invalid response.', 'enterprise-forms' ) );
 		}
 
 		if ( $status < 200 || $status >= 300 ) {
-			$message = isset( $data['error']['message'] ) ? sanitize_text_field( (string) $data['error']['message'] ) : __( 'Stripe request failed.', 'enterprise-forms' );
-			throw new Exception( $message );
+			$message = isset( $data['error']['message'] ) ? sanitize_text_field( (string) $data['error']['message'] ) : esc_html__( 'Stripe request failed.', 'enterprise-forms' );
+			throw new Exception( esc_html( $message ) );
 		}
 
 		return $data;

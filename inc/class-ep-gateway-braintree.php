@@ -20,12 +20,12 @@ class EP_Gateway_Braintree implements EP_Payment_Gateway {
 	public function initialize(): void {
 		foreach ( [ 'merchant_id', 'public_key', 'private_key' ] as $field ) {
 			if ( '' === (string) ( $this->credentials[ $field ] ?? '' ) ) {
-				throw new Exception( __( 'Braintree credentials are incomplete.', 'enterprise-forms' ) );
+				throw new Exception( esc_html__( 'Braintree credentials are incomplete.', 'enterprise-forms' ) );
 			}
 		}
 
 		if ( ! class_exists( '\Braintree\Gateway' ) ) {
-			throw new Exception( __( 'Braintree PHP SDK is required before Braintree payments can be processed.', 'enterprise-forms' ) );
+			throw new Exception( esc_html__( 'Braintree PHP SDK is required before Braintree payments can be processed.', 'enterprise-forms' ) );
 		}
 
 		$this->gateway = new \Braintree\Gateway(
@@ -97,8 +97,8 @@ class EP_Gateway_Braintree implements EP_Payment_Gateway {
 		);
 
 		if ( empty( $result->success ) || empty( $result->transaction ) ) {
-			$message = ! empty( $result->message ) ? sanitize_text_field( (string) $result->message ) : __( 'Braintree transaction failed.', 'enterprise-forms' );
-			throw new Exception( $message );
+			$message = ! empty( $result->message ) ? sanitize_text_field( (string) $result->message ) : esc_html__( 'Braintree transaction failed.', 'enterprise-forms' );
+			throw new Exception( esc_html( $message ) );
 		}
 
 		return $this->verify_payment( sanitize_text_field( (string) $result->transaction->id ) );
