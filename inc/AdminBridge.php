@@ -14,7 +14,7 @@ class AdminBridge {
 		add_menu_page(
 			__( 'Enterprise Forms', 'enterprise-forms' ),
 			__( 'Enterprise Forms', 'enterprise-forms' ),
-			'manage_options',
+			Permissions::MANAGE,
 			'enterprise-forms',
 			[ $this, 'render_admin_wrapper' ],
 			'dashicons-feedback',

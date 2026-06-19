@@ -50,10 +50,16 @@ class Observability {
 	 */
 	public static function health(): array {
 		$cron_ready = ! defined( 'DISABLE_WP_CRON' ) || ! DISABLE_WP_CRON;
+		$tables = self::table_statuses();
 
 		return [
 			'encryption' => [
 				'configured' => EP_Crypto::is_configured(),
+			],
+			'database' => [
+				'tables' => $tables,
+				'ready'  => ! in_array( false, $tables, true ),
+				'db_version' => sanitize_text_field( (string) get_option( 'ep_forms_db_version', '' ) ),
 			],
 			'storage' => [
 				'provider' => class_exists( '\\EP_Cloud_Storage' ) ? \EP_Cloud_Storage::get_provider() : 'unknown',
@@ -61,9 +67,70 @@ class Observability {
 			'mail' => ( new NotificationService() )->get_mail_transport_status(),
 			'cron' => [
 				'configured' => $cron_ready,
+				'next_retention_run' => self::next_scheduled_gmt( 'ep_forms_run_retention_policy' ),
+			],
+			'governance' => class_exists( '\EnterpriseForms\\DataGovernance' ) ? ( new DataGovernance() )->get_settings() : [],
+			'audit' => [
+				'total_events' => self::count_table_rows( 'ep_audit_log' ),
+				'recent_events_24h' => self::count_recent_audit_events(),
+			],
+			'form_versions' => [
+				'total_snapshots' => self::count_table_rows( 'ep_form_versions' ),
 			],
 			'metrics' => get_option( self::METRICS_OPTION, [] ),
 		];
+	}
+
+	/**
+	 * @return array<string, bool>
+	 */
+	private static function table_statuses(): array {
+		$tables = [ 'ep_entries', 'ep_entry_search', 'ep_payment_intents', 'ep_file_uploads', 'ep_audit_log', 'ep_form_versions' ];
+		$statuses = [];
+
+		foreach ( $tables as $table ) {
+			$statuses[ $table ] = self::table_exists( $table );
+		}
+
+		return $statuses;
+	}
+
+	private static function table_exists( string $suffix ): bool {
+		global $wpdb;
+
+		if ( ! $wpdb instanceof \wpdb ) {
+			return false;
+		}
+
+		$table_name = $wpdb->prefix . sanitize_key( $suffix );
+		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) ) === $table_name;
+	}
+
+	private static function count_table_rows( string $suffix ): int {
+		global $wpdb;
+
+		if ( ! $wpdb instanceof \wpdb || ! self::table_exists( $suffix ) ) {
+			return 0;
+		}
+
+		$table_name = $wpdb->prefix . sanitize_key( $suffix );
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
+	}
+
+	private static function count_recent_audit_events(): int {
+		global $wpdb;
+
+		if ( ! $wpdb instanceof \wpdb || ! self::table_exists( 'ep_audit_log' ) ) {
+			return 0;
+		}
+
+		$table_name = $wpdb->prefix . 'ep_audit_log';
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} WHERE created_at >= %s", gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) );
+	}
+
+	private static function next_scheduled_gmt( string $hook ): string {
+		$timestamp = wp_next_scheduled( $hook );
+		return $timestamp ? gmdate( 'c', (int) $timestamp ) : '';
 	}
 
 	/**

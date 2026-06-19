@@ -48,6 +48,7 @@ class EP_Installer {
 	}
 
 	private static function setup_current_site(): void {
+		Permissions::add_caps();
 		EP_Crypto::ensure_encryption_key();
 		EP_Crypto::mark_activation_notice_pending();
 		self::create_tables();
@@ -125,6 +126,43 @@ class EP_Installer {
 
 		dbDelta( $payments_sql );
 		self::normalize_payment_intents_table();
+
+		$audit_table = $wpdb->prefix . 'ep_audit_log';
+		$audit_sql = "CREATE TABLE {$audit_table} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			event VARCHAR(80) NOT NULL,
+			object_type VARCHAR(50) DEFAULT '' NOT NULL,
+			object_id BIGINT(20) UNSIGNED DEFAULT 0 NOT NULL,
+			user_id BIGINT(20) UNSIGNED DEFAULT 0 NOT NULL,
+			ip_address VARCHAR(45) DEFAULT '' NOT NULL,
+			user_agent VARCHAR(255) DEFAULT '' NOT NULL,
+			context JSON NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY event_created (event, created_at),
+			KEY object_created (object_type, object_id, created_at),
+			KEY user_created (user_id, created_at)
+		) {$charset_collate};";
+
+		dbDelta( $audit_sql );
+
+		$form_versions_table = $wpdb->prefix . 'ep_form_versions';
+		$form_versions_sql = "CREATE TABLE {$form_versions_table} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id BIGINT(20) UNSIGNED NOT NULL,
+			schema_version VARCHAR(50) DEFAULT '' NOT NULL,
+			schema_hash CHAR(64) NOT NULL,
+			lifecycle_status VARCHAR(20) DEFAULT '' NOT NULL,
+			schema_json LONGTEXT NOT NULL,
+			created_by BIGINT(20) UNSIGNED DEFAULT 0 NOT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY form_schema_hash (form_id, schema_hash),
+			KEY form_created (form_id, created_at),
+			KEY form_status_created (form_id, lifecycle_status, created_at)
+		) {$charset_collate};";
+
+		dbDelta( $form_versions_sql );
 
 		require_once __DIR__ . '/class-ep-cloud-storage.php';
 		\EP_Cloud_Storage::create_uploads_table();

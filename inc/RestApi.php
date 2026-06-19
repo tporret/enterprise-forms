@@ -91,12 +91,12 @@ class RestApi {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ $this, 'get_storage_settings' ],
-				'permission_callback' => [ $this, 'check_admin_permissions' ],
+				'permission_callback' => [ $this, 'check_storage_permissions' ],
 			],
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'update_storage_settings' ],
-				'permission_callback' => [ $this, 'check_admin_permissions' ],
+				'permission_callback' => [ $this, 'check_storage_permissions' ],
 				'args'                => [
 					'active_provider' => [ 'required' => false, 'sanitize_callback' => 'sanitize_key' ],
 					'providers'       => [ 'required' => false ],
@@ -107,7 +107,43 @@ class RestApi {
 		register_rest_route( 'enterprise-forms/v1', '/health', [
 			'methods'             => 'GET',
 			'callback'            => [ $this, 'get_health' ],
-			'permission_callback' => [ $this, 'check_admin_permissions' ],
+			'permission_callback' => [ $this, 'check_settings_permissions' ],
+		] );
+
+		register_rest_route( 'enterprise-forms/v1', '/governance/settings', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'get_governance_settings' ],
+				'permission_callback' => [ $this, 'check_settings_permissions' ],
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_governance_settings' ],
+				'permission_callback' => [ $this, 'check_settings_permissions' ],
+				'args'                => [
+					'retention_enabled' => [ 'required' => false ],
+					'retention_days'    => [ 'required' => false, 'sanitize_callback' => 'absint' ],
+					'retention_action'  => [ 'required' => false, 'sanitize_callback' => 'sanitize_key' ],
+				],
+			],
+		] );
+
+		register_rest_route( 'enterprise-forms/v1', '/integrations/webhooks', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'get_webhook_settings' ],
+				'permission_callback' => [ $this, 'check_settings_permissions' ],
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_webhook_settings' ],
+				'permission_callback' => [ $this, 'check_settings_permissions' ],
+				'args'                => [
+					'enabled'        => [ 'required' => false ],
+					'endpoints'      => [ 'required' => false ],
+					'signing_secret' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ],
+				],
+			],
 		] );
 
 		register_rest_route( 'enterprise-forms/v1', '/submission-context/(?P<form_id>\\d+)', [
@@ -124,7 +160,15 @@ class RestApi {
 	}
 
 	public function check_admin_permissions(): bool {
-		return current_user_can( 'manage_options' );
+		return current_user_can( Permissions::MANAGE );
+	}
+
+	public function check_settings_permissions(): bool {
+		return current_user_can( Permissions::MANAGE_SETTINGS );
+	}
+
+	public function check_storage_permissions(): bool {
+		return current_user_can( Permissions::MANAGE_STORAGE );
 	}
 
 	/**
@@ -560,6 +604,32 @@ class RestApi {
 		return rest_ensure_response( $settings->get_public_settings() );
 	}
 
+	public function get_governance_settings(): \WP_REST_Response {
+		return rest_ensure_response( ( new DataGovernance() )->get_settings() );
+	}
+
+	public function update_governance_settings( \WP_REST_Request $request ): \WP_REST_Response {
+		return rest_ensure_response( ( new DataGovernance() )->update_settings( $request->get_json_params() ?: $request->get_params() ) );
+	}
+
+	public function get_webhook_settings(): \WP_REST_Response {
+		return rest_ensure_response( ( new WebhookIntegrations() )->get_settings() );
+	}
+
+	public function update_webhook_settings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		try {
+			$settings = ( new WebhookIntegrations() )->update_settings( $request->get_json_params() ?: $request->get_params() );
+		} catch ( \Exception $exception ) {
+			return new \WP_Error(
+				'ep_forms_webhook_settings_save_failed',
+				$exception->getMessage(),
+				[ 'status' => 500 ]
+			);
+		}
+
+		return rest_ensure_response( $settings );
+	}
+
 	public function update_storage_settings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$settings = new EP_Storage_Settings();
 
@@ -572,6 +642,13 @@ class RestApi {
 				[ 'status' => 500 ]
 			);
 		}
+
+		AuditLog::record(
+			'storage_settings_updated',
+			'settings',
+			0,
+			[ 'active_provider' => $settings->get_active_provider() ]
+		);
 
 		return rest_ensure_response( $settings->get_public_settings() );
 	}

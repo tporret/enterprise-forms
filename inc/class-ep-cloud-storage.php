@@ -446,7 +446,8 @@ class EP_Cloud_Storage {
 			uploaded_at DATETIME NOT NULL,
 			KEY form_id (form_id),
 			KEY entry_id (entry_id),
-			KEY field_status (form_id, field_name, status)
+			KEY field_status (form_id, field_name, status),
+			KEY expires_at (expires_at)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';

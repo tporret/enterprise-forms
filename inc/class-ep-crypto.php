@@ -160,7 +160,7 @@ class EP_Crypto {
 	}
 
 	public function render_key_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Permissions::MANAGE_SETTINGS ) ) {
 			return;
 		}
 
@@ -192,7 +192,7 @@ class EP_Crypto {
 	}
 
 	public function handle_dismiss_activation_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Permissions::MANAGE_SETTINGS ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to manage Enterprise Forms encryption settings.', 'enterprise-forms' ) );
 		}
 
@@ -202,6 +202,8 @@ class EP_Crypto {
 		if ( $current_user_id > 0 ) {
 			update_user_meta( $current_user_id, self::ACTIVATION_NOTICE_DISMISSED_META, 1 );
 		}
+
+		AuditLog::record( 'encryption_notice_dismissed', 'settings', 0 );
 
 		$redirect_url = wp_get_referer();
 		if ( ! is_string( $redirect_url ) || '' === $redirect_url ) {
@@ -225,7 +227,7 @@ class EP_Crypto {
 	}
 
 	public function handle_recheck_key_action(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Permissions::MANAGE_SETTINGS ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to manage Enterprise Forms encryption settings.', 'enterprise-forms' ) );
 		}
 
@@ -239,6 +241,8 @@ class EP_Crypto {
 		} elseif ( self::has_fallback_encryption_key() ) {
 			$status = self::FALLBACK_OPTION_STATUS;
 		}
+
+		AuditLog::record( 'encryption_key_rechecked', 'settings', 0, [ 'status' => $status ] );
 
 		$redirect_url = add_query_arg(
 			[

@@ -64,7 +64,7 @@ class EP_REST_Payments extends WP_REST_Controller {
 	}
 
 	public function admin_permissions_check(): bool|WP_Error {
-		if ( current_user_can( 'manage_options' ) ) {
+		if ( current_user_can( Permissions::MANAGE_PAYMENTS ) ) {
 			return true;
 		}
 
@@ -113,6 +113,8 @@ class EP_REST_Payments extends WP_REST_Controller {
 				[ 'status' => 500 ]
 			);
 		}
+
+		AuditLog::record( 'payment_settings_updated', 'settings', 0 );
 
 		return rest_ensure_response( $this->settings_response() );
 	}

@@ -13,6 +13,12 @@
       "skillPath": "skills/engineering/diagnose/SKILL.md",
       "computedHash": "15939a26f86edec2d4862042b8564e5a062cb81d04e047a0cea6305c8830b5f5"
     },
+    "drawio-skill": {
+      "source": "Agents365-ai/365-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/drawio/skills/drawio-skill/SKILL.md",
+      "computedHash": "ca0168de6be5a0b5f9717b1e02ed17c2cbf03552b058b432b379234e35585e1c"
+    },
     "improve-codebase-architecture": {
       "source": "mattpocock/skills",
       "sourceType": "github",

@@ -44,3 +44,6 @@ Thumbs.db
 wp-content/debug.log
 debug.log
 enterprise-forms.html
+skills-lock.json
+artifacts/
+tools/

@@ -98,7 +98,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'export_items' ],
-					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'permission_callback' => [ $this, 'export_items_permissions_check' ],
 					'args'                => [
 						'form_id' => [
 							'required'          => true,
@@ -136,7 +136,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => [ $this, 'update_item_status' ],
-					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'permission_callback' => [ $this, 'update_status_permissions_check' ],
 					'args'                => [
 						'entry_id' => [
 							'required'          => true,
@@ -158,7 +158,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => [ $this, 'update_entry_status' ],
-					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'permission_callback' => [ $this, 'update_status_permissions_check' ],
 					'args'                => [
 						'entry_id' => [
 							'required'          => true,
@@ -209,13 +209,37 @@ class EP_REST_Entries extends WP_REST_Controller {
 	}
 
 	public function get_items_permissions_check( $request ): bool|WP_Error {
-		if ( current_user_can( 'manage_enterprise_forms' ) || current_user_can( 'manage_options' ) ) {
+		if ( current_user_can( Permissions::VIEW_ENTRIES ) ) {
 			return true;
 		}
 
 		return new WP_Error(
 			'ep_forms_forbidden',
 			__( 'You do not have permission to view form entries.', 'enterprise-forms' ),
+			[ 'status' => 403 ]
+		);
+	}
+
+	public function export_items_permissions_check( $request ): bool|WP_Error {
+		if ( current_user_can( Permissions::EXPORT_ENTRIES ) ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'ep_forms_forbidden',
+			__( 'You do not have permission to export form entries.', 'enterprise-forms' ),
+			[ 'status' => 403 ]
+		);
+	}
+
+	public function update_status_permissions_check( $request ): bool|WP_Error {
+		if ( current_user_can( Permissions::EDIT_FORMS ) ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'ep_forms_forbidden',
+			__( 'You do not have permission to update form entries.', 'enterprise-forms' ),
 			[ 'status' => 403 ]
 		);
 	}
@@ -371,11 +395,20 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$this->attach_uploaded_file_references( $form_id, $uuid, $validation['sanitized'] );
 		$this->attach_payment_record( $uuid, $validation['sanitized'] );
 
-		$notification_sent = ( new NotificationService() )->send_submission_notification( $form_id, $uuid, $created_at, $validation['sanitized'] );
+		$notification_queued = SubmissionJobs::enqueue_submission_notification( $form_id, $uuid, $created_at );
 		Observability::increment_metric( 'submissions_accepted' );
-		if ( ! $notification_sent ) {
+		if ( ! $notification_queued ) {
 			Observability::increment_metric( 'notification_failures' );
-			Observability::log( 'warning', 'notification_failed', [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
+			Observability::log( 'warning', 'notification_queue_failed', [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
+			AuditLog::record( 'notification_queue_failed', 'entry', $entry_id, [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
+		} else {
+			AuditLog::record( 'notification_queued', 'entry', $entry_id, [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
+		}
+
+		$webhook_queued = WebhookIntegrations::enqueue_submission_event( $form_id, $uuid, $created_at );
+		if ( ! $webhook_queued ) {
+			Observability::increment_metric( 'webhook_failures' );
+			AuditLog::record( 'webhook_queue_failed', 'entry', $entry_id, [ 'form_id' => $form_id, 'entry_uuid' => $uuid ] );
 		}
 
 		return new WP_REST_Response(
@@ -384,7 +417,8 @@ class EP_REST_Entries extends WP_REST_Controller {
 				'message'      => __( 'Form submission successful.', 'enterprise-forms' ),
 				'entry_uuid'   => $uuid,
 				'schemaVersion' => $validation['schema_version'],
-				'notification_sent' => (bool) $notification_sent,
+				'notification_queued' => (bool) $notification_queued,
+				'webhook_queued' => (bool) $webhook_queued,
 			],
 			200
 		);
@@ -619,12 +653,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 	private function validate_uploaded_file_references( int $form_id, array $payload ): bool|WP_Error {
 		foreach ( $this->extract_file_reference_rows( $form_id, $payload ) as $field_name => $references ) {
 			foreach ( $references as $reference ) {
-				if ( ! $this->uploaded_file_reference_exists( $form_id, $field_name, $reference ) ) {
-					return new WP_Error(
-						'ep_forms_invalid_file_reference',
-						__( 'Uploaded file reference is invalid or expired.', 'enterprise-forms' ),
-						[ 'status' => 400 ]
-					);
+				$reference_check = $this->validate_uploaded_file_reference( $form_id, $field_name, $reference );
+				if ( is_wp_error( $reference_check ) ) {
+					return $reference_check;
 				}
 			}
 		}
@@ -650,27 +681,81 @@ class EP_REST_Entries extends WP_REST_Controller {
 						'form_id'    => (string) $form_id,
 						'field_name' => $field_name,
 						'file_url'   => $reference,
+						'entry_id'   => '',
 					],
 					[ '%s', '%s' ],
-					[ '%s', '%s', '%s' ]
+					[ '%s', '%s', '%s', '%s' ]
 				);
 			}
 		}
 	}
 
-	private function uploaded_file_reference_exists( int $form_id, string $field_name, string $reference ): bool {
+	private function validate_uploaded_file_reference( int $form_id, string $field_name, string $reference ): bool|WP_Error {
+		$record = $this->load_uploaded_file_reference( $form_id, $field_name, $reference );
+		if ( ! is_array( $record ) ) {
+			return new WP_Error(
+				'ep_forms_invalid_file_reference',
+				__( 'Uploaded file reference is invalid or expired.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( '' !== (string) ( $record['entry_id'] ?? '' ) ) {
+			return new WP_Error(
+				'ep_forms_file_reference_already_used',
+				__( 'Uploaded file reference has already been attached to an entry.', 'enterprise-forms' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$status = sanitize_key( (string) ( $record['status'] ?? '' ) );
+		if ( ! in_array( $status, [ 'uploaded', 'created' ], true ) ) {
+			return new WP_Error(
+				'ep_forms_invalid_file_reference_status',
+				__( 'Uploaded file reference is not ready for submission.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( (int) ( $record['file_size'] ?? 0 ) <= 0 ) {
+			return new WP_Error(
+				'ep_forms_invalid_file_reference_size',
+				__( 'Uploaded file reference has invalid metadata.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$expires_at = (string) ( $record['expires_at'] ?? '' );
+		if ( '' !== $expires_at && strtotime( $expires_at . ' UTC' ) < time() ) {
+			return new WP_Error(
+				'ep_forms_expired_file_reference',
+				__( 'Uploaded file reference is invalid or expired.', 'enterprise-forms' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function load_uploaded_file_reference( int $form_id, string $field_name, string $reference ): ?array {
 		global $wpdb;
 
 		$table_name = $wpdb->prefix . 'ep_file_uploads';
 
-		return (bool) $wpdb->get_var(
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id FROM {$table_name} WHERE form_id = %s AND field_name = %s AND file_url = %s AND status IN ('uploaded', 'created') LIMIT 1",
+				"SELECT id, form_id, entry_id, field_name, file_url, file_size, provider, status, expires_at FROM {$table_name} WHERE form_id = %s AND field_name = %s AND file_url = %s LIMIT 1",
 				(string) $form_id,
 				$field_name,
 				$reference
-			)
+			),
+			ARRAY_A
 		);
+
+		return is_array( $row ) ? $row : null;
 	}
 
 	/**
@@ -939,6 +1024,20 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$response->header( 'Content-Disposition', 'attachment; filename="' . $filename . '"' );
 		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
 
+		AuditLog::record(
+			'entries_exported',
+			'form',
+			$form_id,
+			[
+				'row_count'   => count( $export_rows ),
+				'status'      => $status,
+				'has_search'  => '' !== $normalized_search,
+				'date_from'   => $date_from,
+				'date_to'     => $date_to,
+				'column_count' => count( $headers ),
+			]
+		);
+
 		return $response;
 	}
 
@@ -1006,6 +1105,18 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$this->decrypt_entry_payload( (string) $entry['payload'] )
 		);
 
+		AuditLog::record(
+			'entry_status_updated',
+			'entry',
+			$entry_id,
+			[
+				'form_id'     => (int) $entry['form_id'],
+				'entry_uuid'  => (string) $entry['uuid'],
+				'old_status'  => (string) $entry['status'],
+				'new_status'  => $status,
+			]
+		);
+
 		return new WP_REST_Response(
 			[
 				'id' => $entry_id,
@@ -1071,6 +1182,18 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$status,
 			(string) $row['created_at'],
 			$payload
+		);
+
+		AuditLog::record(
+			'entry_status_updated',
+			'entry',
+			$entry_id,
+			[
+				'form_id'     => (int) $row['form_id'],
+				'entry_uuid'  => (string) $row['uuid'],
+				'old_status'  => (string) $row['status'],
+				'new_status'  => $status,
+			]
 		);
 
 		$row['status'] = $status;

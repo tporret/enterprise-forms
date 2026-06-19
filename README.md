@@ -103,6 +103,30 @@ sudo tools/normalize-perms.sh --apply --fix-owner --user terrencelp --group www-
 
 The script is dry-run by default and applies collaborative permissions (`2775` on directories, `775` on executable files, `664` on non-executable files).
 
+#### Draw.io PNG Export (Reusable Docker Service)
+
+For local diagram exports without a desktop draw.io install, use the included renderer service wrapper:
+
+```bash
+tools/drawio-renderer.sh start
+tools/drawio-renderer.sh status
+tools/drawio-renderer.sh export artifacts/enterprise-forms-architecture/enterprise-forms-architecture.drawio
+tools/drawio-renderer.sh stop
+```
+
+Notes:
+
+- Default API endpoint is `http://127.0.0.1:3333`.
+- Export defaults to transparent PNG output and width `2400`.
+- Override output and size as needed:
+
+```bash
+tools/drawio-renderer.sh export input.drawio output.png --width 3000
+tools/drawio-renderer.sh export input.drawio output.png --scale 2
+```
+
+If you prefer Docker Compose directly, use `tools/drawio-renderer-compose.yml`.
+
 ## Usage Flow
 
 1. Create a new form from the dashboard.

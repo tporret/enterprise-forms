@@ -21,6 +21,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/inc/class-ep-installer.php';
 require_once __DIR__ . '/inc/Observability.php';
+require_once __DIR__ . '/inc/Permissions.php';
+require_once __DIR__ . '/inc/AuditLog.php';
+require_once __DIR__ . '/inc/FormVersions.php';
+require_once __DIR__ . '/inc/SubmissionJobs.php';
+require_once __DIR__ . '/inc/DataGovernance.php';
+require_once __DIR__ . '/inc/WebhookIntegrations.php';
 require_once __DIR__ . '/inc/class-ep-crypto.php';
 require_once __DIR__ . '/inc/class-ep-payment-settings.php';
 require_once __DIR__ . '/inc/class-ep-storage-settings.php';
@@ -98,6 +104,22 @@ class Plugin {
 	private function init_components(): void {
 		if ( class_exists( '\\EnterpriseForms\\EP_Installer' ) ) {
 			EP_Installer::init();
+		}
+
+		if ( class_exists( '\EnterpriseForms\\Permissions' ) ) {
+			( new Permissions() )->init();
+		}
+
+		if ( class_exists( '\EnterpriseForms\\SubmissionJobs' ) ) {
+			( new SubmissionJobs() )->init();
+		}
+
+		if ( class_exists( '\EnterpriseForms\\DataGovernance' ) ) {
+			( new DataGovernance() )->init();
+		}
+
+		if ( class_exists( '\EnterpriseForms\\WebhookIntegrations' ) ) {
+			( new WebhookIntegrations() )->init();
 		}
 
 		// Initialize the main core systems.
