@@ -5,6 +5,7 @@ import { Tooltip } from '@wordpress/components';
 
 type GatewaySlug = 'stripe' | 'braintree' | 'paypal' | 'square';
 type StorageProviderSlug = 'local' | 's3' | 'r2' | 'gcs';
+type RetentionAction = 'anonymize' | 'delete';
 
 interface GatewayState {
 	label: string;
@@ -27,6 +28,18 @@ interface StorageSettingsResponse {
 	active_provider: StorageProviderSlug;
 	default_provider: StorageProviderSlug;
 	providers: Record< StorageProviderSlug, StorageProviderState >;
+}
+
+interface GovernanceSettingsResponse {
+	retention_enabled: boolean;
+	retention_days: number;
+	retention_action: RetentionAction;
+}
+
+interface WebhookSettingsResponse {
+	enabled: boolean;
+	endpoints: string[];
+	has_signing_secret: boolean;
 }
 
 interface EncryptionNotice {
@@ -114,6 +127,32 @@ const EMPTY_STORAGE_PROVIDERS = Object.keys( STORAGE_PROVIDER_FIELDS ).reduce( (
 	carry[ provider as StorageProviderSlug ] = { label: provider, configured: provider === 'local', fields: {} };
 	return carry;
 }, {} as Record< StorageProviderSlug, StorageProviderState > );
+
+const EMPTY_GOVERNANCE_SETTINGS: GovernanceSettingsResponse = {
+	retention_enabled: false,
+	retention_days: 365,
+	retention_action: 'anonymize',
+};
+
+const EMPTY_WEBHOOK_SETTINGS: WebhookSettingsResponse = {
+	enabled: false,
+	endpoints: [],
+	has_signing_secret: false,
+};
+
+const parsePositiveInt = ( value: string, fallback: number ): number => {
+	const parsed = Number( value );
+	if ( Number.isNaN( parsed ) ) {
+		return fallback;
+	}
+
+	return Math.max( 1, Math.round( parsed ) );
+};
+
+const parseWebhookEndpoints = ( value: string ): string[] => value
+	.split( /[\r\n,]+/ )
+	.map( ( endpoint ) => endpoint.trim() )
+	.filter( Boolean );
 
 const buildDraftFromResponse = ( response: PaymentsSettingsResponse ): Record< GatewaySlug, Record< string, string > > => {
 	const nextDraft = {} as Record< GatewaySlug, Record< string, string > >;
@@ -203,14 +242,26 @@ const SettingsPayments = (): JSX.Element => {
 	const [ isEncryptionOpen, setIsEncryptionOpen ] = useState( true );
 	const [ isPaymentsOpen, setIsPaymentsOpen ] = useState( true );
 	const [ isStorageOpen, setIsStorageOpen ] = useState( true );
+	const [ isGovernanceOpen, setIsGovernanceOpen ] = useState( true );
+	const [ isWebhooksOpen, setIsWebhooksOpen ] = useState( true );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ isSavingStorage, setIsSavingStorage ] = useState( false );
+	const [ isSavingGovernance, setIsSavingGovernance ] = useState( false );
+	const [ isSavingWebhooks, setIsSavingWebhooks ] = useState( false );
 	const [ message, setMessage ] = useState< string | null >( null );
 	const [ error, setError ] = useState< string | null >( null );
 	const [ validationErrors, setValidationErrors ] = useState< Record< string, string > >( {} );
 	const [ storageMessage, setStorageMessage ] = useState< string | null >( null );
 	const [ storageError, setStorageError ] = useState< string | null >( null );
+	const [ governanceSettings, setGovernanceSettings ] = useState< GovernanceSettingsResponse >( EMPTY_GOVERNANCE_SETTINGS );
+	const [ governanceMessage, setGovernanceMessage ] = useState< string | null >( null );
+	const [ governanceError, setGovernanceError ] = useState< string | null >( null );
+	const [ webhookSettings, setWebhookSettings ] = useState< WebhookSettingsResponse >( EMPTY_WEBHOOK_SETTINGS );
+	const [ webhookEndpointsDraft, setWebhookEndpointsDraft ] = useState( '' );
+	const [ webhookSigningSecretDraft, setWebhookSigningSecretDraft ] = useState( '' );
+	const [ webhookMessage, setWebhookMessage ] = useState< string | null >( null );
+	const [ webhookError, setWebhookError ] = useState< string | null >( null );
 	const [ encryptionNotice ] = useState< EncryptionNotice | null >( () => getEncryptionNoticeFromQuery() );
 	const [ snippetCopyMessage, setSnippetCopyMessage ] = useState< string | null >( null );
 
@@ -235,8 +286,10 @@ const SettingsPayments = (): JSX.Element => {
 		Promise.all( [
 			apiFetch< PaymentsSettingsResponse >( { path: '/enterprise-forms/v1/payments/settings' } ),
 			apiFetch< StorageSettingsResponse >( { path: '/enterprise-forms/v1/storage/settings' } ),
+			apiFetch< GovernanceSettingsResponse >( { path: '/enterprise-forms/v1/governance/settings' } ),
+			apiFetch< WebhookSettingsResponse >( { path: '/enterprise-forms/v1/integrations/webhooks' } ),
 		] )
-			.then( ( [ paymentsResponse, storageResponse ] ) => {
+			.then( ( [ paymentsResponse, storageResponse, governanceResponse, webhookResponse ] ) => {
 				if ( isCancelled ) {
 					return;
 				}
@@ -246,6 +299,10 @@ const SettingsPayments = (): JSX.Element => {
 				setStorageProviders( { ...EMPTY_STORAGE_PROVIDERS, ...storageResponse.providers } );
 				setActiveStorageProvider( storageResponse.active_provider || 'local' );
 				setStorageDraft( buildStorageDraftFromResponse( storageResponse ) );
+				setGovernanceSettings( { ...EMPTY_GOVERNANCE_SETTINGS, ...governanceResponse } );
+				setWebhookSettings( { ...EMPTY_WEBHOOK_SETTINGS, ...webhookResponse } );
+				setWebhookEndpointsDraft( ( webhookResponse.endpoints || [] ).join( '\n' ) );
+				setWebhookSigningSecretDraft( '' );
 			} )
 			.catch( () => {
 				if ( ! isCancelled ) {
@@ -452,6 +509,56 @@ const SettingsPayments = (): JSX.Element => {
 		}
 	};
 
+	const saveGovernanceSettings = async ( event: { preventDefault: () => void } ): Promise< void > => {
+		event.preventDefault();
+		setIsSavingGovernance( true );
+		setGovernanceMessage( null );
+		setGovernanceError( null );
+
+		try {
+			const response = await apiFetch< GovernanceSettingsResponse >( {
+				path: '/enterprise-forms/v1/governance/settings',
+				method: 'POST',
+				data: governanceSettings,
+			} );
+
+			setGovernanceSettings( { ...EMPTY_GOVERNANCE_SETTINGS, ...response } );
+			setGovernanceMessage( __( 'Retention settings saved.', 'enterprise-forms' ) );
+		} catch {
+			setGovernanceError( __( 'Unable to save retention settings.', 'enterprise-forms' ) );
+		} finally {
+			setIsSavingGovernance( false );
+		}
+	};
+
+	const saveWebhookSettings = async ( event: { preventDefault: () => void } ): Promise< void > => {
+		event.preventDefault();
+		setIsSavingWebhooks( true );
+		setWebhookMessage( null );
+		setWebhookError( null );
+
+		try {
+			const response = await apiFetch< WebhookSettingsResponse >( {
+				path: '/enterprise-forms/v1/integrations/webhooks',
+				method: 'POST',
+				data: {
+					enabled: webhookSettings.enabled,
+					endpoints: parseWebhookEndpoints( webhookEndpointsDraft ),
+					signing_secret: webhookSigningSecretDraft,
+				},
+			} );
+
+			setWebhookSettings( { ...EMPTY_WEBHOOK_SETTINGS, ...response } );
+			setWebhookEndpointsDraft( ( response.endpoints || [] ).join( '\n' ) );
+			setWebhookSigningSecretDraft( '' );
+			setWebhookMessage( __( 'Webhook settings saved.', 'enterprise-forms' ) );
+		} catch {
+			setWebhookError( __( 'Unable to save webhook settings. Check that encryption is configured before saving a signing secret.', 'enterprise-forms' ) );
+		} finally {
+			setIsSavingWebhooks( false );
+		}
+	};
+
 	return (
 		<section className="space-y-8 p-6 lg:p-10">
 			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
@@ -463,7 +570,7 @@ const SettingsPayments = (): JSX.Element => {
 				>
 					<div>
 						<h2 className="text-2xl font-semibold tracking-tight text-slate-900">{ __( 'Enterprise Forms Settings', 'enterprise-forms' ) }</h2>
-						<p className="mt-2 text-sm text-slate-600">{ __( 'Configure payments, file storage, and core plugin behavior.', 'enterprise-forms' ) }</p>
+						<p className="mt-2 text-sm text-slate-600">{ __( 'Configure payments, file storage, retention, webhooks, and core plugin behavior.', 'enterprise-forms' ) }</p>
 					</div>
 					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
 						{ isOverviewOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
@@ -472,7 +579,7 @@ const SettingsPayments = (): JSX.Element => {
 
 				{ isOverviewOpen && (
 					<div className="border-t border-slate-200 px-6 py-5">
-						<p className="text-sm text-slate-600">{ __( 'Use the sections below to connect payment gateways and configure how uploaded files are stored.', 'enterprise-forms' ) }</p>
+						<p className="text-sm text-slate-600">{ __( 'Use the sections below to connect payment gateways, configure file storage, set retention behavior, and manage outbound webhooks.', 'enterprise-forms' ) }</p>
 					</div>
 				) }
 			</section>
@@ -757,6 +864,163 @@ const SettingsPayments = (): JSX.Element => {
 									className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									{ isSavingStorage ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save File Storage', 'enterprise-forms' ) }
+								</button>
+							</>
+						) }
+					</form>
+				) }
+			</section>
+
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsGovernanceOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isGovernanceOpen }
+				>
+					<div>
+						<h3 className="text-lg font-semibold text-slate-900">{ __( 'Retention', 'enterprise-forms' ) }</h3>
+						<p className="mt-1 text-sm text-slate-600">{ __( 'Apply retention rules to stored entry data.', 'enterprise-forms' ) }</p>
+					</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isGovernanceOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
+
+				{ isGovernanceOpen && (
+					<form onSubmit={ ( event ) => void saveGovernanceSettings( event ) } className="border-t border-slate-200 px-6 py-6">
+						{ isLoading ? (
+							<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
+						) : (
+							<>
+								<label className="flex items-start gap-3 text-sm text-slate-700">
+									<input
+										type="checkbox"
+										checked={ governanceSettings.retention_enabled }
+										onChange={ ( event ) => setGovernanceSettings( ( current ) => ( { ...current, retention_enabled: event.target.checked } ) ) }
+										className="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+									/>
+									<span>
+										<span className="block font-medium text-slate-900">{ __( 'Enable automatic retention policy', 'enterprise-forms' ) }</span>
+										<span className="mt-1 block text-slate-600">{ __( 'A scheduled job checks stored entries daily and applies the selected action after the age limit.', 'enterprise-forms' ) }</span>
+									</span>
+								</label>
+
+								<div className="mt-5 grid gap-5 md:grid-cols-2">
+									<label className="block text-sm font-medium text-slate-700">
+										<span>{ __( 'Retain entries for days', 'enterprise-forms' ) }</span>
+										<input
+											type="number"
+											min="1"
+											value={ String( governanceSettings.retention_days ) }
+											onChange={ ( event ) => setGovernanceSettings( ( current ) => ( { ...current, retention_days: parsePositiveInt( event.target.value, current.retention_days ) } ) ) }
+											className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+										/>
+									</label>
+
+									<label className="block text-sm font-medium text-slate-700">
+										<span>{ __( 'Retention action', 'enterprise-forms' ) }</span>
+										<select
+											value={ governanceSettings.retention_action }
+											onChange={ ( event ) => setGovernanceSettings( ( current ) => ( { ...current, retention_action: event.target.value as RetentionAction } ) ) }
+											className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+										>
+											<option value="anonymize">{ __( 'Anonymize entries', 'enterprise-forms' ) }</option>
+											<option value="delete">{ __( 'Delete entries', 'enterprise-forms' ) }</option>
+										</select>
+									</label>
+								</div>
+
+								{ governanceMessage && <p className="mt-4 text-sm text-green-700">{ governanceMessage }</p> }
+								{ governanceError && <p className="mt-4 text-sm text-red-700">{ governanceError }</p> }
+
+								<button
+									type="submit"
+									disabled={ isSavingGovernance }
+									className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{ isSavingGovernance ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Retention Settings', 'enterprise-forms' ) }
+								</button>
+							</>
+						) }
+					</form>
+				) }
+			</section>
+
+			<section className="max-w-5xl rounded-lg border border-slate-200 bg-white">
+				<button
+					type="button"
+					onClick={ () => setIsWebhooksOpen( ( current ) => ! current ) }
+					className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+					aria-expanded={ isWebhooksOpen }
+				>
+					<div>
+						<h3 className="text-lg font-semibold text-slate-900">{ __( 'Webhooks', 'enterprise-forms' ) }</h3>
+						<p className="mt-1 text-sm text-slate-600">{ __( 'Send submission events to external integration endpoints.', 'enterprise-forms' ) }</p>
+					</div>
+					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						{ isWebhooksOpen ? __( 'Collapse', 'enterprise-forms' ) : __( 'Expand', 'enterprise-forms' ) }
+					</span>
+				</button>
+
+				{ isWebhooksOpen && (
+					<form onSubmit={ ( event ) => void saveWebhookSettings( event ) } className="border-t border-slate-200 px-6 py-6">
+						{ isLoading ? (
+							<p className="text-sm text-slate-700">{ __( 'Loading settings...', 'enterprise-forms' ) }</p>
+						) : (
+							<>
+								<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+									<label className="flex items-start gap-3 text-sm text-slate-700">
+										<input
+											type="checkbox"
+											checked={ webhookSettings.enabled }
+											onChange={ ( event ) => setWebhookSettings( ( current ) => ( { ...current, enabled: event.target.checked } ) ) }
+											className="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+										/>
+										<span>
+											<span className="block font-medium text-slate-900">{ __( 'Enable submission webhooks', 'enterprise-forms' ) }</span>
+											<span className="mt-1 block text-slate-600">{ __( 'Webhook delivery is skipped until webhooks are enabled and at least one endpoint is saved.', 'enterprise-forms' ) }</span>
+										</span>
+									</label>
+									<span className={ webhookSettings.has_signing_secret ? 'text-xs font-medium text-green-700' : 'text-xs font-medium text-slate-500' }>
+										{ webhookSettings.has_signing_secret ? __( 'Signing secret saved', 'enterprise-forms' ) : __( 'No signing secret', 'enterprise-forms' ) }
+									</span>
+								</div>
+
+								<label className="block text-sm font-medium text-slate-700">
+									<span>{ __( 'Endpoint URLs', 'enterprise-forms' ) }</span>
+									<textarea
+										value={ webhookEndpointsDraft }
+										onChange={ ( event ) => setWebhookEndpointsDraft( event.target.value ) }
+										rows={ 5 }
+										placeholder="https://example.com/webhooks/enterprise-forms"
+										className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+									/>
+									<span className="mt-1 block text-xs text-slate-500">{ __( 'Add one URL per line, or separate URLs with commas. Invalid URLs are ignored by the server.', 'enterprise-forms' ) }</span>
+								</label>
+
+								<label className="mt-5 block text-sm font-medium text-slate-700">
+									<span>{ __( 'Signing secret', 'enterprise-forms' ) }</span>
+									<input
+										type="password"
+										value={ webhookSigningSecretDraft }
+										onChange={ ( event ) => setWebhookSigningSecretDraft( event.target.value ) }
+										placeholder={ webhookSettings.has_signing_secret ? __( 'Saved. Leave blank to keep existing value.', 'enterprise-forms' ) : '' }
+										className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+										autoComplete="new-password"
+									/>
+									<span className="mt-1 block text-xs text-slate-500">{ __( 'Used to sign webhook payloads. Encryption must be configured before a secret can be saved.', 'enterprise-forms' ) }</span>
+								</label>
+
+								{ webhookMessage && <p className="mt-4 text-sm text-green-700">{ webhookMessage }</p> }
+								{ webhookError && <p className="mt-4 text-sm text-red-700">{ webhookError }</p> }
+
+								<button
+									type="submit"
+									disabled={ isSavingWebhooks }
+									className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{ isSavingWebhooks ? __( 'Saving...', 'enterprise-forms' ) : __( 'Save Webhooks', 'enterprise-forms' ) }
 								</button>
 							</>
 						) }

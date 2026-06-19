@@ -3,7 +3,7 @@ Contributors: terrencelp
 Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
 Requires at least: 6.5
 Requires PHP: 8.2
-Stable tag: 1.1.4
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,8 @@ Use it to create forms, publish them with a block, collect submissions through c
 * Encrypted payment credential storage with secret values hidden from settings responses.
 * Per-form notification controls with fallback to the site admin email.
 * Per-form spam prevention controls for honeypot, rate limiting, and duplicate lock windows.
+* Global retention controls for anonymizing or deleting stored entries after a configured age.
+* Disabled-by-default outbound submission webhooks with encrypted signing secret support.
 * Built-in frontend themes for different presentation styles.
 * Entry viewing screen for submitted data.
 
@@ -41,6 +43,18 @@ The builder now includes per-form controls for:
 * Duplicate submission lock window in seconds.
 
 Default values are honeypot enabled, 10 submissions, 60-second rate window, and 300-second duplicate lock window.
+
+= Data governance =
+
+Enterprise Forms includes global retention controls under the Settings screen. Administrators can enable the scheduled retention policy, choose how many days entries should be retained, and select whether expired entries are anonymized or deleted.
+
+Retention runs through the daily WordPress cron event `ep_forms_run_retention_policy`. Anonymized entries keep the entry row for operational reporting while replacing sensitive payload/search data; deleted entries are removed from the entry tables.
+
+= Webhooks =
+
+Enterprise Forms includes disabled-by-default outbound submission webhooks under the Settings screen. Administrators can enable webhook delivery, save one or more endpoint URLs, and store an encrypted signing secret for payload authentication.
+
+Webhook delivery is queued after a successful submission. Endpoint URLs are sanitized and validated before storage, and signing secrets require the plugin encryption service to be configured.
 
 = Included field types =
 
@@ -128,7 +142,24 @@ Entry viewing is restricted to privileged users in wp-admin.
 
 Yes. In the form builder, open the Spam Prevention panel to adjust honeypot behavior, rate-limit values, and duplicate lock timing for that form.
 
+= Can I configure entry retention? =
+
+Yes. Open the Settings screen and use the Retention panel to enable the scheduled retention policy, set the retention age, and choose anonymization or deletion.
+
+= Can Enterprise Forms send submission webhooks? =
+
+Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add endpoint URLs, and save an encrypted signing secret.
+
 == Changelog ==
+
+= 1.2.0 =
+
+* Added admin Settings panels for retention and webhooks.
+* Added REST-backed retention controls for enabling the policy, setting retention age, and choosing anonymize or delete behavior.
+* Added REST-backed webhook controls for endpoint URLs, delivery enablement, and encrypted signing secret storage.
+* Documented data governance and webhook behavior in README files.
+* Synced release metadata to `1.2.0` in plugin header/constants, package metadata, block metadata, and readme files.
+* Rebuilt admin and block assets with WordPress experimental module output enabled.
 
 = 1.1.4 =
 
@@ -182,6 +213,10 @@ Yes. In the form builder, open the Spam Prevention panel to adjust honeypot beha
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+
+Adds Settings panels for retention and outbound submission webhooks, plus aligned 1.2.0 release metadata.
 
 = 1.1.4 =
 

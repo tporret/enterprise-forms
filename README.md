@@ -2,7 +2,7 @@
 
 Enterprise Forms is a modern WordPress forms plugin built around a full-screen React admin workstation, a block-based form builder, and a frontend renderer powered by the WordPress Interactivity API.
 
-Current plugin version: 1.1.4.
+Current plugin version: 1.2.0.
 
 It is designed for teams that want native WordPress primitives on the backend, a structured schema for forms, and a lean frontend runtime without relying on a third-party SaaS.
 
@@ -18,6 +18,8 @@ It is designed for teams that want native WordPress primitives on the backend, a
 - Encrypted payment credential storage with public client config exposure only where required.
 - Per-form notification settings with admin-email fallback.
 - Per-form spam prevention settings for honeypot, rate limiting, and duplicate lock windows.
+- Retention policy controls for anonymizing or deleting stored entries after a configured age.
+- Disabled-by-default outbound submission webhooks with encrypted signing secret support.
 - Themeable frontend output with included `chameleon` and `itsm` themes.
 - Custom `ep_form` post type with REST support.
 
@@ -132,12 +134,13 @@ If you prefer Docker Compose directly, use `tools/drawio-renderer-compose.yml`.
 1. Create a new form from the dashboard.
 2. Build the schema in the workstation using the included field blocks.
 3. Configure form theme, notification settings, and spam prevention settings.
-4. Configure the selected gateway under **Settings > Payments** when the form needs checkout.
-5. Add the Payment Checkout block.
-6. Save the form schema to `ep_form_schema` post meta.
-7. Embed the form with the `enterprise-forms/renderer` block.
-8. Accept submissions through the REST API.
-9. Review entries from the admin entries screen.
+4. Configure global retention and webhook settings under **Settings** when needed.
+5. Configure the selected gateway under **Settings > Payments** when the form needs checkout.
+6. Add the Payment Checkout block.
+7. Save the form schema to `ep_form_schema` post meta.
+8. Embed the form with the `enterprise-forms/renderer` block.
+9. Accept submissions through the REST API.
+10. Review entries from the admin entries screen.
 
 ## File Storage
 
@@ -211,6 +214,30 @@ Developer hooks:
 - `ep_forms_submission_rate_window`
 - `ep_forms_duplicate_submission_window`
 
+## Data Governance
+
+Enterprise Forms includes global retention controls under **Settings > Retention** for stored entry data.
+
+Retention controls:
+
+- Enable or disable the scheduled retention policy.
+- Configure how many days entries should be retained.
+- Choose whether expired entries are anonymized or deleted.
+
+Retention runs on the daily WordPress cron event `ep_forms_run_retention_policy`. Anonymized entries keep the entry row for operational reporting while replacing sensitive payload/search data; deleted entries are removed from the entry tables.
+
+## Webhooks
+
+Enterprise Forms includes disabled-by-default outbound submission webhooks under **Settings > Webhooks**.
+
+Webhook controls:
+
+- Enable or disable webhook delivery.
+- Save one or more endpoint URLs.
+- Save an encrypted signing secret for payload authentication.
+
+Webhook delivery is queued after a successful submission. Endpoint URLs are sanitized and validated by WordPress HTTP APIs, and signing secrets require the plugin encryption service to be configured before they can be stored.
+
 ## Architecture Overview
 
 ### Backend
@@ -221,6 +248,8 @@ Developer hooks:
 - `inc/RestApi.php`: registers admin stats and notification status endpoints.
 - `inc/class-ep-rest-entries.php`: handles public submission and admin entry retrieval.
 - `inc/class-ep-rest-payments.php`: handles payment settings, intent creation, and payment verification.
+- `inc/DataGovernance.php`: manages retention settings and scheduled anonymization/deletion.
+- `inc/WebhookIntegrations.php`: queues and delivers outbound submission webhooks.
 - `inc/class-ep-payment-settings.php`: centralizes encrypted gateway credential storage.
 - `inc/interface-ep-payment-gateway.php`: defines the payment gateway adapter contract.
 - `inc/class-ep-payment-factory.php`: resolves the configured gateway from schema and creates adapters.
@@ -261,6 +290,10 @@ Key routes include:
 - `GET /notifications/statuses` for notification configuration state
 - `GET /payments/settings` for authenticated payment gateway settings
 - `POST /payments/settings` for authenticated payment gateway settings updates
+- `GET /governance/settings` for authenticated retention settings
+- `POST /governance/settings` for authenticated retention settings updates
+- `GET /integrations/webhooks` for authenticated webhook settings
+- `POST /integrations/webhooks` for authenticated webhook settings updates
 - `POST /payment-intent` for public payment intent, client-token, or order preparation
 
 ## Notes
@@ -269,6 +302,7 @@ Key routes include:
 - Notifications can use explicitly configured recipients or fall back to the site admin email.
 - File uploads are stored as WordPress attachments.
 - Payment credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
+- Webhook signing secrets are stored encrypted using the plugin crypto service.
 - Admin entry access is restricted to privileged users.
 
 ## Release Packaging
