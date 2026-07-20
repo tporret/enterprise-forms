@@ -175,7 +175,12 @@ class RestApi {
 	 * Check if user can upload files (requires nonce or authentication).
 	 */
 	public function check_upload_permissions(): bool {
-		return wp_verify_nonce( $_SERVER['HTTP_X_WP_NONCE'] ?? '', 'wp_rest' ) !== false || is_user_logged_in();
+		$nonce = '';
+		if ( isset( $_SERVER['HTTP_X_WP_NONCE'] ) ) {
+			$nonce = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_WP_NONCE'] ) );
+		}
+
+		return wp_verify_nonce( $nonce, 'wp_rest' ) !== false || is_user_logged_in();
 	}
 
 	/**
@@ -532,9 +537,12 @@ class RestApi {
 			return new \WP_Error( 'upload_temp_file_failed', __( 'Unable to inspect uploaded file.', 'enterprise-forms' ) );
 		}
 
-		file_put_contents( $temp_file, $file_content );
+		if ( false === file_put_contents( $temp_file, $file_content ) ) {
+			return new \WP_Error( 'upload_temp_file_failed', __( 'Unable to inspect uploaded file.', 'enterprise-forms' ) );
+		}
+
 		$detected = wp_check_filetype_and_ext( $temp_file, $file_name );
-		@unlink( $temp_file );
+		wp_delete_file( $temp_file );
 
 		$extension = strtolower( (string) ( $detected['ext'] ?? pathinfo( $file_name, PATHINFO_EXTENSION ) ) );
 		$mime_type = strtolower( (string) ( $detected['type'] ?? '' ) );

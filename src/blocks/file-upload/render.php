@@ -82,7 +82,7 @@ $accept_attr = rtrim( $accept_attr, ',' );
 		<p style="margin: 8px 0; font-size: 12px; color: #666;">
 			<?php
 			/* translators: %s: max file size in MB */
-			printf( esc_html__( 'Max file size: %s', 'enterprise-forms' ), esc_html( wp_convert_bytes_to_hr( $max_size ) ) );
+			printf( esc_html__( 'Max file size: %s', 'enterprise-forms' ), esc_html( size_format( $max_size ) ) );
 			?>
 		</p>
 		<p style="margin: 4px 0; font-size: 12px; color: #666;">

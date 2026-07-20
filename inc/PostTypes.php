@@ -40,8 +40,8 @@ class PostTypes {
 	public function register_form_post_status(): void {
 		register_post_status( 'inactive', [
 			'label'                     => _x( 'Inactive', 'post status', 'enterprise-forms' ),
+			/* translators: %s: number of inactive forms. */
 			'label_count'               => _n_noop(
-				/* translators: %s: number of inactive forms. */
 				'Inactive <span class="count">(%s)</span>',
 				'Inactive <span class="count">(%s)</span>',
 				'enterprise-forms'
@@ -58,8 +58,8 @@ class PostTypes {
 
 		register_post_status( 'archived', [
 			'label'                     => _x( 'Archived', 'post status', 'enterprise-forms' ),
+			/* translators: %s: number of archived forms. */
 			'label_count'               => _n_noop(
-				/* translators: %s: number of archived forms. */
 				'Archived <span class="count">(%s)</span>',
 				'Archived <span class="count">(%s)</span>',
 				'enterprise-forms'

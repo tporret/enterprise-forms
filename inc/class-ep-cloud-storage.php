@@ -333,7 +333,7 @@ class EP_Cloud_Storage {
 				sprintf(
 					/* translators: %s: maximum allowed file size, for example 10 MB. */
 					__( 'File size exceeds maximum of %s.', 'enterprise-forms' ),
-					wp_convert_bytes_to_hr( $max_size )
+					size_format( $max_size )
 				)
 			);
 		}

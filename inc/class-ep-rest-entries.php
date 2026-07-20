@@ -987,8 +987,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$export_rows[] = $export_row;
 		}
 
-		$stream = fopen( 'php://temp', 'r+' );
-		if ( false === $stream ) {
+		try {
+			$stream = new \SplTempFileObject();
+		} catch ( \RuntimeException $exception ) {
 			return new WP_Error(
 				'ep_forms_export_failed',
 				__( 'Unable to prepare export file.', 'enterprise-forms' ),
@@ -996,21 +997,23 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		fputcsv( $stream, $headers );
+		$stream->fputcsv( $headers );
 
 		foreach ( $export_rows as $row ) {
 			$csv_row = [];
 			foreach ( $headers as $header ) {
 				$csv_row[] = $row[ $header ] ?? '';
 			}
-			fputcsv( $stream, $csv_row );
+			$stream->fputcsv( $csv_row );
 		}
 
-		rewind( $stream );
-		$csv = stream_get_contents( $stream );
-		fclose( $stream );
+		$stream->rewind();
+		$csv = '';
+		while ( ! $stream->eof() ) {
+			$csv .= (string) $stream->fgets();
+		}
 
-		if ( false === $csv ) {
+		if ( '' === $csv ) {
 			return new WP_Error(
 				'ep_forms_export_failed',
 				__( 'Unable to prepare export file.', 'enterprise-forms' ),

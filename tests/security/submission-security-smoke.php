@@ -1,8 +1,10 @@
 <?php
 declare(strict_types=1);
 
-if ( ! defined( 'ABSPATH' ) && 'cli' !== PHP_SAPI ) {
-	exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	if ( 'cli' !== PHP_SAPI ) {
+		exit;
+	}
 }
 
 use EnterpriseForms\EP_REST_Entries;
@@ -23,7 +25,7 @@ for ( $depth = 0; $depth < 8; $depth++ ) {
 }
 
 if ( '' === $wp_load ) {
-	fwrite( STDERR, "Unable to locate wp-load.php. Run this from inside a WordPress checkout.\n" );
+	echo "Unable to locate wp-load.php. Run this from inside a WordPress checkout.\n";
 	exit( 1 );
 }
 
@@ -212,7 +214,7 @@ $upload_check = $method->invoke( $rest_api, $spoofed_svg, 'avatar.jpg', [ 'jpg',
 $assert( is_wp_error( $upload_check ), 'Spoofed image upload content should be rejected.' );
 
 if ( ! empty( $failures ) ) {
-	fwrite( STDERR, "Submission security smoke checks failed:\n- " . implode( "\n- ", $failures ) . "\n" );
+	echo "Submission security smoke checks failed:\n- " . esc_html( implode( "\n- ", $failures ) ) . "\n";
 	exit( 1 );
 }
 
