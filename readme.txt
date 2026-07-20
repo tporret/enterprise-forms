@@ -1,13 +1,14 @@
 === Enterprise Forms ===
 Contributors: terrencelp
-Tags: forms, form builder, payments, stripe, paypal, square, block editor, rest api, interactivity api
+Tags: forms, form builder, payments, block editor, rest api
 Requires at least: 6.5
+Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Enterprise Forms is a modern WordPress form builder with a full-screen admin workstation, a frontend block renderer, encrypted submissions, native payments, and REST-powered form processing.
+Enterprise Forms is a modern WordPress form builder with a full-screen admin, encrypted submissions, native payments, and block rendering.
 
 == Description ==
 
@@ -152,6 +153,10 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 
 == Changelog ==
 
+= 1.2.1 =
+
+* Version bump release.
+
 = 1.2.0 =
 
 * Added admin Settings panels for retention and webhooks.
@@ -213,6 +218,10 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.2.1 =
+
+Version bump release.
 
 = 1.2.0 =
 

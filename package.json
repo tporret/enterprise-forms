@@ -1,6 +1,6 @@
 {
   "name": "enterprise-forms",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A comprehensive WordPress forms plugin with full-screen React UI and native interactivity.",
   "main": "build/index.js",
   "scripts": {

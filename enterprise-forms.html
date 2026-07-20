@@ -1,0 +1,1192 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  html { scroll-behavior: smooth; }
+  .efp-landing-wrapper *, .efp-landing-wrapper *::before, .efp-landing-wrapper *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ef-bg: #0A0E14;
+    --ef-bg2: #11161F;
+    --ef-bg3: #181F2B;
+    --ef-bg4: #222B3A;
+    --ef-border: rgba(255,255,255,0.06);
+    --ef-border-bright: rgba(255,255,255,0.14);
+    --ef-border-strong: rgba(255,255,255,0.22);
+    --ef-text: #F0F4F8;
+    --ef-muted: #8A99AD;
+    --ef-faint: #4A5A70;
+    --ef-primary: #C6F432;
+    --ef-primary-soft: #DCFA7A;
+    --ef-primary-dim: rgba(198,244,50,0.15);
+    --ef-primary-border: rgba(198,244,50,0.32);
+    --ef-secondary: #FF4FB8;
+    --ef-secondary-dim: rgba(255,79,184,0.13);
+    --ef-secondary-border: rgba(255,79,184,0.30);
+    --ef-accent3: #4DD0E1;
+    --ef-accent3-dim: rgba(77,208,225,0.12);
+    --ef-amber: #FFB347;
+    --ef-amber-dim: rgba(255,179,71,0.12);
+    --ef-coral: #FF7A6E;
+    --ef-coral-dim: rgba(255,122,110,0.12);
+    --ef-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    --ef-serif: 'Instrument Serif', Georgia, serif;
+    --ef-mono: 'JetBrains Mono', 'SF Mono', monospace;
+    --ef-r: 8px;
+    --ef-r-lg: 14px;
+    --ef-r-xl: 20px;
+    --ef-content-max: 1280px;
+  }
+  .efp-landing-wrapper {
+    background: var(--ef-bg);
+    color: var(--ef-text);
+    font-family: var(--ef-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding-top: 0;
+  }
+  .efp-landing-wrapper [id] { scroll-margin-top: 88px; }
+  .efp-landing-wrapper a:focus-visible,
+  .efp-landing-wrapper button:focus-visible {
+    outline: 2px solid var(--ef-primary);
+    outline-offset: 3px;
+  }
+  .ef-page { margin: 0 auto; padding: 0 28px; max-width: var(--ef-content-max); }
+
+  /* Nav */
+  .efp-landing-wrapper nav {
+    border-bottom: 1px solid var(--ef-border);
+    padding: 18px 0;
+    position: sticky;
+    top: 0;
+    background: rgba(10,14,20,0.92);
+    backdrop-filter: blur(16px);
+    z-index: 100;
+  }
+  .ef-nav-inner {
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .ef-logo {
+    font-family: var(--ef-serif);
+    font-size: 22px;
+    color: var(--ef-text);
+    letter-spacing: -0.3px;
+    font-style: italic;
+  }
+  .ef-logo span {
+    color: var(--ef-primary);
+    font-style: normal;
+    font-family: var(--ef-sans);
+    font-weight: 600;
+    font-size: 18px;
+  }
+  .ef-nav-links { display: flex; align-items: center; gap: 32px; }
+  .ef-nav-links a {
+    font-size: 14px;
+    color: var(--ef-muted);
+    text-decoration: none;
+    font-weight: 400;
+    transition: color 0.2s;
+    white-space: nowrap;
+  }
+  .ef-nav-links a:hover { color: var(--ef-text); }
+  .ef-nav-cta {
+    background: var(--ef-primary);
+    color: #0A0E14;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 8px;
+    font-family: var(--ef-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .ef-nav-cta:hover { background: var(--ef-primary-soft); transform: translateY(-1px); }
+
+  /* Hero */
+  .ef-hero { padding: 80px 0 56px; text-align: center; position: relative; overflow: hidden; }
+  .ef-hero > .ef-page { max-width: none; }
+  .ef-hero::before {
+    content: '';
+    position: absolute;
+    top: -220px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 900px;
+    height: 560px;
+    background: radial-gradient(ellipse at center, rgba(198,244,50,0.14) 0%, rgba(255,79,184,0.06) 45%, transparent 70%);
+    pointer-events: none;
+  }
+  .ef-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--ef-bg3);
+    border: 1px solid var(--ef-border-bright);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ef-primary-soft);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    font-family: var(--ef-mono);
+  }
+  .ef-hero-eyebrow .ef-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--ef-primary);
+    border-radius: 50%;
+    animation: ef-pulse 2s infinite;
+    box-shadow: 0 0 8px var(--ef-primary);
+  }
+  @keyframes ef-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .ef-hero h1 {
+    font-family: var(--ef-serif);
+    font-size: clamp(46px, 7.2vw, 82px);
+    line-height: 1.05;
+    letter-spacing: -1.8px;
+    color: var(--ef-text);
+    max-width: 900px;
+    margin: 0 auto 16px;
+    font-weight: 400;
+  }
+  .ef-hero h1 em { font-style: italic; color: var(--ef-primary); }
+  .ef-hero h1 .ef-h-mag { font-style: italic; color: var(--ef-secondary); }
+  .ef-hero-sub {
+    font-size: 18px;
+    color: var(--ef-muted);
+    max-width: 600px;
+    margin: 0 auto 44px;
+    line-height: 1.65;
+    font-weight: 300;
+  }
+  .ef-hero-buttons { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .ef-btn-primary {
+    background: var(--ef-primary);
+    color: #0A0E14;
+    padding: 14px 32px;
+    border-radius: var(--ef-r);
+    font-family: var(--ef-sans);
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s;
+  }
+  .ef-btn-primary:hover { background: var(--ef-primary-soft); transform: translateY(-1px); }
+  .ef-btn-ghost {
+    background: transparent;
+    color: var(--ef-text);
+    padding: 13px 28px;
+    border-radius: var(--ef-r);
+    font-family: var(--ef-sans);
+    font-size: 15px;
+    font-weight: 400;
+    border: 1px solid var(--ef-border-bright);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s;
+  }
+  .ef-btn-ghost:hover { border-color: var(--ef-primary); color: var(--ef-primary-soft); }
+
+  /* Hero visual */
+  .ef-hero-visual {
+    margin: 64px auto 0;
+    max-width: 920px;
+    background: var(--ef-bg2);
+    border: 1px solid var(--ef-border-bright);
+    border-radius: var(--ef-r-xl);
+    overflow: hidden;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,0.6), 0 0 0 1px rgba(198,244,50,0.04);
+  }
+  .ef-hv-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--ef-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--ef-bg3);
+  }
+  .ef-hv-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .ef-hv-dot.r { background: #FF5F57; }
+  .ef-hv-dot.y { background: #FEBC2E; }
+  .ef-hv-dot.g { background: #28C840; }
+  .ef-hv-label {
+    font-size: 12px;
+    color: var(--ef-faint);
+    margin-left: auto;
+    font-family: var(--ef-mono);
+  }
+  .ef-hv-body { display: grid; grid-template-columns: 1.05fr 1fr; }
+  .ef-hv-col { padding: 28px; }
+  .ef-hv-col + .ef-hv-col { border-left: 1px solid var(--ef-border); }
+  .ef-hv-title {
+    font-family: var(--ef-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ef-faint);
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+  .ef-field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    border: 1px solid var(--ef-border);
+    background: var(--ef-bg3);
+    font-size: 13px;
+  }
+  .ef-field-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+    font-family: var(--ef-mono);
+  }
+  .ef-fi-text { background: var(--ef-primary-dim); color: var(--ef-primary); }
+  .ef-fi-email { background: var(--ef-accent3-dim); color: var(--ef-accent3); }
+  .ef-fi-pay { background: var(--ef-secondary-dim); color: var(--ef-secondary); }
+  .ef-fi-file { background: var(--ef-amber-dim); color: var(--ef-amber); }
+  .ef-fi-check { background: var(--ef-coral-dim); color: var(--ef-coral); }
+  .ef-field-name { color: var(--ef-text); flex: 1; font-weight: 500; }
+  .ef-field-type { font-size: 11px; color: var(--ef-faint); font-family: var(--ef-mono); }
+  .ef-badge-encrypted {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ef-primary-dim);
+    border: 1px solid var(--ef-primary-border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 11px;
+    color: var(--ef-primary);
+    font-weight: 600;
+    font-family: var(--ef-mono);
+    margin-top: 14px;
+    letter-spacing: 0.04em;
+  }
+  .ef-json-snippet {
+    font-family: var(--ef-mono);
+    font-size: 12px;
+    line-height: 1.75;
+    color: var(--ef-muted);
+  }
+  .ef-jv-str { color: var(--ef-primary-soft); }
+  .ef-jv-bool { color: var(--ef-amber); }
+  .ef-jv-key { color: var(--ef-secondary); }
+  .ef-jv-num { color: var(--ef-coral); }
+
+  /* Requires bar */
+  .ef-logo-bar {
+    border-top: 1px solid var(--ef-border);
+    border-bottom: 1px solid var(--ef-border);
+    padding: 28px 0;
+    text-align: center;
+  }
+  .ef-logo-bar-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ef-faint);
+    margin-bottom: 20px;
+    font-weight: 500;
+    font-family: var(--ef-mono);
+  }
+  .ef-compat-badges {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ef-compat-badge {
+    padding: 7px 16px;
+    border-radius: 100px;
+    border: 1px solid var(--ef-border-bright);
+    font-size: 12px;
+    color: var(--ef-muted);
+    font-weight: 400;
+    background: var(--ef-bg2);
+  }
+  .ef-compat-badge strong { color: var(--ef-text); font-weight: 600; }
+
+  /* Stats */
+  .ef-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--ef-border);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-r-lg);
+    overflow: hidden;
+    margin: 80px 0;
+  }
+  .ef-stat-box { background: var(--ef-bg2); padding: 30px 24px; text-align: center; }
+  .ef-stat-num {
+    font-family: var(--ef-serif);
+    font-size: 44px;
+    line-height: 1;
+    color: var(--ef-text);
+    margin-bottom: 6px;
+    font-weight: 400;
+  }
+  .ef-stat-num em { font-style: italic; color: var(--ef-primary); }
+  .ef-stat-label {
+    font-size: 12px;
+    color: var(--ef-faint);
+    font-weight: 500;
+    font-family: var(--ef-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Sections */
+  .efp-landing-wrapper section { padding: 80px 0; }
+  .ef-section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ef-primary);
+    font-weight: 600;
+    margin-bottom: 14px;
+    font-family: var(--ef-mono);
+  }
+  .ef-section-heading {
+    font-family: var(--ef-serif);
+    font-size: clamp(32px, 4.8vw, 52px);
+    line-height: 1.1;
+    letter-spacing: -1px;
+    color: var(--ef-text);
+    margin-bottom: 18px;
+    font-weight: 400;
+  }
+  .ef-section-heading em { font-style: italic; color: var(--ef-primary); }
+  .ef-section-heading .ef-mag { font-style: italic; color: var(--ef-secondary); }
+  .ef-section-sub {
+    font-size: 17px;
+    color: var(--ef-muted);
+    max-width: 580px;
+    line-height: 1.65;
+    font-weight: 300;
+    margin-bottom: 48px;
+  }
+
+  /* Feature grid */
+  .ef-feat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .ef-feat-card {
+    background: var(--ef-bg2);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-r-lg);
+    padding: 28px 24px;
+    transition: border-color 0.25s, transform 0.25s, background 0.25s;
+  }
+  .ef-feat-card:hover {
+    border-color: var(--ef-border-bright);
+    transform: translateY(-2px);
+    background: var(--ef-bg3);
+  }
+  .ef-feat-card.ef-accent-border { border-color: var(--ef-primary-border); }
+  .ef-feat-card.ef-mag-border { border-color: var(--ef-secondary-border); }
+  .ef-feat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    font-size: 18px;
+    font-family: var(--ef-mono);
+    font-weight: 600;
+  }
+  .ef-feat-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ef-text);
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+  .ef-feat-card p { font-size: 14px; color: var(--ef-muted); line-height: 1.6; }
+  .ef-feat-card code {
+    font-family: var(--ef-mono);
+    font-size: 12px;
+    color: var(--ef-primary);
+    background: var(--ef-primary-dim);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Two col */
+  .ef-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+    align-items: center;
+  }
+  .ef-two-col.ef-reverse { direction: rtl; }
+  .ef-two-col.ef-reverse > * { direction: ltr; }
+  .ef-check-list { list-style: none; }
+  .ef-check-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 15px;
+    color: var(--ef-muted);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .ef-check-list li .ef-ck {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--ef-primary-dim);
+    border: 1px solid var(--ef-primary-border);
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ef-check-list li .ef-ck svg { width: 11px; height: 11px; }
+  .ef-check-list li strong { color: var(--ef-text); font-weight: 600; }
+  .ef-check-list code {
+    font-family: var(--ef-mono);
+    font-size: 12px;
+    color: var(--ef-primary);
+    background: var(--ef-primary-dim);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Panels */
+  .ef-panel-dark {
+    background: var(--ef-bg2);
+    border: 1px solid var(--ef-border-bright);
+    border-radius: var(--ef-r-xl);
+    overflow: hidden;
+  }
+  .ef-panel-bar {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ef-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--ef-bg3);
+  }
+  .ef-panel-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ef-border-strong); }
+  .ef-panel-bar-title {
+    font-size: 11px;
+    color: var(--ef-faint);
+    margin-left: 6px;
+    font-family: var(--ef-mono);
+  }
+  .ef-panel-body { padding: 22px; }
+
+  /* Field type grid */
+  .ef-fieldtype-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .ef-ft-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--ef-bg3);
+    border: 1px solid var(--ef-border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--ef-text);
+    font-weight: 500;
+  }
+  .ef-ft-chip .ef-ft-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ef-primary);
+    flex-shrink: 0;
+  }
+  .ef-ft-chip.ef-ft-special .ef-ft-dot { background: var(--ef-secondary); }
+
+  /* Payment panel */
+  .ef-pay-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--ef-bg3);
+    border: 1px solid var(--ef-border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+  .ef-pay-row.ef-active { border-color: var(--ef-primary-border); background: var(--ef-primary-dim); }
+  .ef-pay-row.ef-disabled { opacity: 0.45; }
+  .ef-pay-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--ef-bg4);
+    border: 1px solid var(--ef-border-bright);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--ef-mono);
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--ef-text);
+  }
+  .ef-pay-name { flex: 1; font-weight: 500; color: var(--ef-text); font-size: 14px; }
+  .ef-pay-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--ef-primary);
+    color: #0A0E14;
+    font-weight: 700;
+    font-family: var(--ef-mono);
+    letter-spacing: 0.04em;
+  }
+  .ef-pay-badge.ef-pay-badge-mute {
+    background: var(--ef-bg4);
+    color: var(--ef-faint);
+  }
+
+  /* REST table */
+  .ef-rest-table { width: 100%; border-collapse: collapse; }
+  .ef-rest-table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ef-faint);
+    font-weight: 500;
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--ef-border);
+    font-family: var(--ef-mono);
+  }
+  .ef-rest-table td {
+    padding: 11px 14px;
+    font-size: 13px;
+    color: var(--ef-muted);
+    border-bottom: 1px solid var(--ef-border);
+    font-family: var(--ef-mono);
+  }
+  .ef-rest-table tr:last-child td { border-bottom: none; }
+  .ef-rest-table td:first-child { color: var(--ef-text); }
+  .ef-method-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-family: var(--ef-mono);
+  }
+  .ef-method-get { background: var(--ef-accent3-dim); color: var(--ef-accent3); }
+  .ef-method-post { background: var(--ef-primary-dim); color: var(--ef-primary); }
+  .ef-method-delete { background: var(--ef-coral-dim); color: var(--ef-coral); }
+
+  /* Security cards */
+  .ef-sec-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .ef-sec-card {
+    background: var(--ef-bg3);
+    border: 1px solid var(--ef-border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .ef-sec-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ef-text);
+    margin-bottom: 6px;
+  }
+  .ef-sec-card p {
+    font-size: 12px;
+    color: var(--ef-muted);
+    line-height: 1.55;
+  }
+  .ef-sec-card code {
+    font-family: var(--ef-mono);
+    font-size: 11px;
+    color: var(--ef-primary-soft);
+  }
+  .ef-sec-tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-family: var(--ef-mono);
+    letter-spacing: 0.05em;
+  }
+
+  /* CTA */
+  .ef-cta-section { text-align: center; padding: 96px 0; position: relative; overflow: hidden; }
+  .ef-cta-section::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    width: 700px;
+    height: 460px;
+    background: radial-gradient(ellipse at center, rgba(198,244,50,0.13) 0%, rgba(255,79,184,0.05) 50%, transparent 75%);
+    pointer-events: none;
+  }
+  .ef-cta-section h2 {
+    font-family: var(--ef-serif);
+    font-size: clamp(38px, 5.2vw, 62px);
+    line-height: 1.08;
+    letter-spacing: -1.2px;
+    margin-bottom: 18px;
+    font-weight: 400;
+  }
+  .ef-cta-section h2 em { font-style: italic; color: var(--ef-primary); }
+  .ef-cta-section p {
+    font-size: 17px;
+    color: var(--ef-muted);
+    max-width: 500px;
+    margin: 0 auto 40px;
+    font-weight: 300;
+  }
+
+  /* Footer */
+  .ef-collab-footer {
+    border-top: 1px solid var(--ef-border);
+    padding: 44px 0;
+    text-align: center;
+  }
+  .ef-collab-brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-family: var(--ef-serif);
+    font-size: 22px;
+    color: var(--ef-text);
+    letter-spacing: -0.3px;
+    font-style: italic;
+  }
+  .ef-collab-brand span {
+    color: var(--ef-primary);
+    font-style: normal;
+    font-family: var(--ef-sans);
+    font-weight: 600;
+    font-size: 18px;
+  }
+  .ef-collab-copy {
+    max-width: 720px;
+    margin: 0 auto 18px;
+    font-size: 13px;
+    color: var(--ef-faint);
+  }
+  .ef-collab-copy a { color: var(--ef-primary-soft); text-decoration: none; }
+  .ef-collab-copy a:hover { color: var(--ef-primary); }
+  .ef-collab-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ef-collab-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--ef-border-bright);
+    background: var(--ef-bg2);
+    color: var(--ef-muted);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: border-color 0.2s, color 0.2s, transform 0.2s;
+  }
+  .ef-collab-chip:hover {
+    border-color: var(--ef-primary);
+    color: var(--ef-text);
+    transform: translateY(-1px);
+  }
+  .ef-collab-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--ef-mono);
+    letter-spacing: 0.04em;
+  }
+  .ef-collab-chip.ef-is-copilot .ef-collab-icon { background: var(--ef-primary-dim); color: var(--ef-primary); }
+  .ef-collab-chip.ef-is-gemini .ef-collab-icon { background: var(--ef-accent3-dim); color: var(--ef-accent3); }
+  .ef-collab-chip.ef-is-claude .ef-collab-icon { background: var(--ef-amber-dim); color: var(--ef-amber); }
+  .ef-collab-chip.ef-is-gpt .ef-collab-icon { background: var(--ef-secondary-dim); color: var(--ef-secondary); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .ef-feat-grid { grid-template-columns: repeat(2, 1fr); }
+    .ef-fieldtype-grid { grid-template-columns: repeat(2, 1fr); }
+    .ef-stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 768px) {
+    .ef-page { padding: 0 20px; }
+    .ef-nav-inner { padding: 0 20px; flex-wrap: wrap; gap: 12px; }
+    .ef-feat-grid, .ef-two-col, .ef-sec-grid { grid-template-columns: 1fr; }
+    .ef-fieldtype-grid { grid-template-columns: repeat(2, 1fr); }
+    .ef-hv-body { grid-template-columns: 1fr; }
+    .ef-hv-col + .ef-hv-col { border-left: none; border-top: 1px solid var(--ef-border); }
+    .ef-hero { padding: 56px 0 40px; }
+    .ef-hero-buttons { flex-direction: column; width: 100%; }
+    .ef-btn-primary, .ef-btn-ghost, .ef-nav-cta { width: 100%; text-align: center; }
+    .ef-two-col { gap: 32px; }
+    .efp-landing-wrapper section { padding: 56px 0; }
+    .ef-cta-section { padding: 72px 0; }
+    .ef-nav-links { width: 100%; overflow-x: auto; gap: 16px; padding-bottom: 2px; flex-wrap: nowrap; justify-content: flex-start; }
+    .ef-collab-links { gap: 8px; }
+    .ef-stats-row { margin: 56px 0; }
+  }
+</style>
+
+<div class="efp-landing-wrapper">
+
+  <nav aria-label="Enterprise Forms section navigation">
+    <div class="ef-nav-inner">
+      <div class="ef-logo">Enterprise<span>Forms</span></div>
+      <div class="ef-nav-links">
+        <a href="#features">Features</a>
+        <a href="#builder">Builder</a>
+        <a href="#payments">Payments</a>
+        <a href="#security">Security</a>
+        <a href="#api">REST API</a>
+      </div>
+      <a href="https://github.com/tporret/enterprise-forms" class="ef-nav-cta">Get the Plugin →</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <div class="ef-hero">
+    <div class="ef-page">
+      <div class="ef-hero-eyebrow">
+        <span class="ef-dot"></span>
+        WordPress Plugin · v1.2.1
+      </div>
+      <h1>Forms, rebuilt for<br><em>serious</em> <span class="ef-h-mag">teams.</span></h1>
+      <p class="ef-hero-sub">A full-screen React workstation, a block-native builder, encrypted submissions, and native checkout with Stripe, Braintree, PayPal, and Square — without the SaaS tax.</p>
+      <div class="ef-hero-buttons">
+        <a href="https://github.com/tporret/enterprise-forms" class="ef-btn-primary">Download Free →</a>
+        <a href="#features" class="ef-btn-ghost">See all features</a>
+      </div>
+
+      <div class="ef-hero-visual">
+        <div class="ef-hv-bar">
+          <div class="ef-hv-dot r"></div><div class="ef-hv-dot y"></div><div class="ef-hv-dot g"></div>
+          <span class="ef-hv-label">enterprise-forms / builder / contact-with-payment</span>
+        </div>
+        <div class="ef-hv-body">
+          <div class="ef-hv-col">
+            <div class="ef-hv-title">Form Schema — Contact + Donation</div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-text">Aa</span><span class="ef-field-name">full_name</span><span class="ef-field-type">Text</span></div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-email">@</span><span class="ef-field-name">email</span><span class="ef-field-type">Email</span></div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-text">¶</span><span class="ef-field-name">message</span><span class="ef-field-type">Textarea</span></div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-file">↑</span><span class="ef-field-name">attachment</span><span class="ef-field-type">File Upload</span></div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-check">✓</span><span class="ef-field-name">consent</span><span class="ef-field-type">Consent</span></div>
+            <div class="ef-field-row"><span class="ef-field-icon ef-fi-pay">$</span><span class="ef-field-name">donation</span><span class="ef-field-type">Payment Checkout</span></div>
+            <div class="ef-badge-encrypted">🔒 ENCRYPTED PAYLOAD · PAYMENT VERIFIED</div>
+          </div>
+          <div class="ef-hv-col">
+            <div class="ef-hv-title">Submission via REST · enterprise-forms/v1</div>
+            <div class="ef-json-snippet">
+              <span>POST</span> <span class="ef-jv-str">/entries/42</span><br>
+              <span>{</span><br>
+              &nbsp;&nbsp;<span class="ef-jv-key">"full_name"</span>: <span class="ef-jv-str">"Alex Rivera"</span>,<br>
+              &nbsp;&nbsp;<span class="ef-jv-key">"email"</span>: <span class="ef-jv-str">"alex@example.com"</span>,<br>
+              &nbsp;&nbsp;<span class="ef-jv-key">"message"</span>: <span class="ef-jv-str">"Hello team."</span>,<br>
+              &nbsp;&nbsp;<span class="ef-jv-key">"consent"</span>: <span class="ef-jv-bool">true</span>,<br>
+              &nbsp;&nbsp;<span class="ef-jv-key">"donation"</span>: {<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span class="ef-jv-key">"amount"</span>: <span class="ef-jv-num">2500</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span class="ef-jv-key">"currency"</span>: <span class="ef-jv-str">"usd"</span>,<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span class="ef-jv-key">"payment_intent"</span>: <span class="ef-jv-str">"pi_3OZ..."</span><br>
+              &nbsp;&nbsp;}<br>
+              <span>}</span><br>
+              <br>
+              <span style="color:var(--ef-primary);">→ 201 Created</span> &nbsp;<span style="color:var(--ef-faint);">// entry encrypted + stored</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPAT BAR -->
+  <div class="ef-logo-bar">
+    <div class="ef-logo-bar-label">Built On</div>
+    <div class="ef-compat-badges">
+      <div class="ef-compat-badge"><strong>WordPress</strong> 6.5+</div>
+      <div class="ef-compat-badge"><strong>PHP</strong> 8.2+</div>
+      <div class="ef-compat-badge"><strong>React</strong> Admin Workstation</div>
+      <div class="ef-compat-badge"><strong>Interactivity API</strong> Frontend</div>
+      <div class="ef-compat-badge"><strong>Block Editor</strong> Native</div>
+      <div class="ef-compat-badge"><strong>Stripe · Braintree · PayPal · Square</strong> Checkout</div>
+      <div class="ef-compat-badge"><strong>GPLv2</strong> Licensed</div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="ef-page">
+    <div class="ef-stats-row">
+      <div class="ef-stat-box"><div class="ef-stat-num"><em>17</em></div><div class="ef-stat-label">Field Blocks</div></div>
+      <div class="ef-stat-box"><div class="ef-stat-num"><em>12</em></div><div class="ef-stat-label">REST Endpoints</div></div>
+      <div class="ef-stat-box"><div class="ef-stat-num"><em>AES</em></div><div class="ef-stat-label">Encrypted Entries</div></div>
+      <div class="ef-stat-box"><div class="ef-stat-num"><em>0</em></div><div class="ef-stat-label">SaaS Lock-in</div></div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="ef-page">
+      <div class="ef-section-label">Core Features</div>
+      <h2 class="ef-section-heading">Every form primitive,<br><em>fully native</em> to WP.</h2>
+      <p class="ef-section-sub">Built for teams that want first-class WordPress primitives on the backend and a lean, framework-free runtime on the frontend.</p>
+      <div class="ef-feat-grid">
+
+        <div class="ef-feat-card ef-accent-border">
+          <div class="ef-feat-icon" style="background: var(--ef-primary-dim); color: var(--ef-primary);">⌘</div>
+          <h3>Full-Screen Admin Workstation</h3>
+          <p>A dedicated React app replaces cramped metaboxes — dashboard, builder, entries, and settings in one focused workspace.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-accent3-dim); color: var(--ef-accent3);">▦</div>
+          <h3>Block-Based Form Builder</h3>
+          <p>Each field is a real block. Compose, drag, and configure forms with the same primitives WordPress already speaks.</p>
+        </div>
+
+        <div class="ef-feat-card ef-mag-border">
+          <div class="ef-feat-icon" style="background: var(--ef-secondary-dim); color: var(--ef-secondary);">$</div>
+          <h3>Native Payment Checkout</h3>
+          <p>A first-class <code>Payment Checkout</code> block with Stripe, Braintree, PayPal, and Square — every gateway verified server-side before the entry is stored.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-amber-dim); color: var(--ef-amber);">⚡</div>
+          <h3>Interactivity API Renderer</h3>
+          <p>Frontend rendering through the <code>enterprise-forms/renderer</code> dynamic block — no React on your visitors' devices.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-coral-dim); color: var(--ef-coral);">🔒</div>
+          <h3>Encrypted Entry Storage</h3>
+          <p>Submission payloads are encrypted before they hit the custom <code>wp_ep_entries</code> table — never plain text at rest.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-primary-dim); color: var(--ef-primary);">↑</div>
+          <h3>Native File Uploads</h3>
+          <p>File fields plug into the WordPress media library — and optionally direct-to-S3, R2, or GCS for large files.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-accent3-dim); color: var(--ef-accent3);">✉</div>
+          <h3>Per-Form Notifications</h3>
+          <p>Configure recipients per form with a safe fallback to the site admin email, plus visibility into transport status.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-amber-dim); color: var(--ef-amber);">◎</div>
+          <h3>Themeable Frontend</h3>
+          <p>Ships with <code>chameleon</code> and <code>itsm</code> themes — design tokens are injected so forms inherit your brand.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-secondary-dim); color: var(--ef-secondary);">{ }</div>
+          <h3>Schema-First Forms</h3>
+          <p>Every form is a structured schema stored in <code>ep_form_schema</code> post meta — portable, inspectable, deployable.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-coral-dim); color: var(--ef-coral);">⛬</div>
+          <h3>Per-Form Spam Prevention</h3>
+          <p>Tune the honeypot trap, rate-limit count and window, and duplicate-lock timing per form — backed by nonce and submission-token replay protection.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-accent3-dim); color: var(--ef-accent3);">⟳</div>
+          <h3>Data Retention Controls</h3>
+          <p>A scheduled policy on the <code>ep_forms_run_retention_policy</code> cron event anonymizes or deletes stored entries after a configured age.</p>
+        </div>
+
+        <div class="ef-feat-card">
+          <div class="ef-feat-icon" style="background: var(--ef-amber-dim); color: var(--ef-amber);">↗</div>
+          <h3>Outbound Webhooks</h3>
+          <p>Disabled-by-default submission webhooks queue after success, with sanitized endpoint URLs and an encrypted signing secret for payload authentication.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- BUILDER -->
+  <section id="builder" style="background: var(--ef-bg2); border-top: 1px solid var(--ef-border); border-bottom: 1px solid var(--ef-border);">
+    <div class="ef-page">
+      <div class="ef-two-col">
+        <div>
+          <div class="ef-section-label">Field Library</div>
+          <h2 class="ef-section-heading">17 field blocks.<br>Zero <em>plugin sprawl.</em></h2>
+          <p class="ef-section-sub">From plain text inputs to multi-gateway payment checkout, every field type ships in the box and renders through a single, schema-driven runtime.</p>
+          <ul class="ef-check-list">
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Composable blocks</strong> — every field is a real Gutenberg block, not a custom canvas</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Validation built-in</strong> — server-side validation backed by <code>EP_Validator</code></li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Auto-save schemas</strong> — the workstation persists changes through the REST API as you build</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Logic ready</strong> — conditional logic primitives drive show/hide and required behavior</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Custom post type</strong> — forms live as <code>ep_form</code> with REST support</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="ef-panel-dark">
+            <div class="ef-panel-bar">
+              <div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div>
+              <span class="ef-panel-bar-title">Block Inserter · Enterprise Forms</span>
+            </div>
+            <div class="ef-panel-body">
+              <div style="font-family:var(--ef-mono);font-size:11px;color:var(--ef-faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;font-weight:500;">Field Blocks</div>
+              <div class="ef-fieldtype-grid">
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Text</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Email</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Textarea</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Phone</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Number</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Date</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>URL</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Select</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Radio</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Checkbox</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Consent</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Hidden</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Checkbox Group</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Rating</div>
+                <div class="ef-ft-chip ef-ft-special"><span class="ef-ft-dot"></span>File Upload</div>
+                <div class="ef-ft-chip ef-ft-special"><span class="ef-ft-dot"></span>Payment Checkout</div>
+                <div class="ef-ft-chip"><span class="ef-ft-dot"></span>Submit</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAYMENTS -->
+  <section id="payments">
+    <div class="ef-page">
+      <div class="ef-two-col ef-reverse">
+        <div>
+          <div class="ef-section-label">Native Payments</div>
+          <h2 class="ef-section-heading">Four gateways,<br><span class="ef-mag">server-verified.</span></h2>
+          <p class="ef-section-sub">A hardened payment path built on an adapter boundary — Stripe, Braintree, PayPal, and Square share one submission flow, so each gateway plugs in without rewriting submissions.</p>
+          <ul class="ef-check-list">
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>The browser never sends the amount.</strong> The server calculates payable totals from the saved schema.</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Payment verified before storage.</strong> Payment-required submissions are rejected unless the gateway confirms success.</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Adapter boundary.</strong> <code>EP_Payment_Gateway</code> contract resolved via factory.</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Encrypted credentials.</strong> Gateway secrets live in WP options, encrypted by the plugin crypto service.</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span><strong>Audit-ready payload.</strong> Gateway, transaction ID, amount, currency, and receipt URL persist with the entry.</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="ef-panel-dark">
+            <div class="ef-panel-bar">
+              <div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div>
+              <span class="ef-panel-bar-title">Settings · Payments</span>
+            </div>
+            <div class="ef-panel-body">
+              <div class="ef-pay-row ef-active">
+                <div class="ef-pay-logo" style="color:var(--ef-secondary);">S</div>
+                <div class="ef-pay-name">Stripe — PaymentIntents</div>
+                <span class="ef-pay-badge">ACTIVE</span>
+              </div>
+              <div class="ef-pay-row ef-active">
+                <div class="ef-pay-logo">B</div>
+                <div class="ef-pay-name">Braintree — Drop-in</div>
+                <span class="ef-pay-badge">ACTIVE</span>
+              </div>
+              <div class="ef-pay-row ef-active">
+                <div class="ef-pay-logo">P</div>
+                <div class="ef-pay-name">PayPal — Orders</div>
+                <span class="ef-pay-badge">ACTIVE</span>
+              </div>
+              <div class="ef-pay-row ef-active">
+                <div class="ef-pay-logo">Sq</div>
+                <div class="ef-pay-name">Square — Web Payments</div>
+                <span class="ef-pay-badge">ACTIVE</span>
+              </div>
+
+              <div style="margin-top:16px;padding:14px 16px;background:var(--ef-bg3);border-radius:10px;border:1px solid var(--ef-border);">
+                <div style="font-family:var(--ef-mono);font-size:11px;color:var(--ef-faint);letter-spacing:0.05em;line-height:1.6;">// every gateway prepares browser checkout, captures or verifies<br>// server-side, and returns a normalized payment record before storage.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security" style="background: var(--ef-bg2); border-top: 1px solid var(--ef-border); border-bottom: 1px solid var(--ef-border);">
+    <div class="ef-page">
+      <div class="ef-two-col">
+        <div>
+          <div class="ef-section-label">Security &amp; Storage</div>
+          <h2 class="ef-section-heading">Entries you can<br><em>actually defend.</em></h2>
+          <p class="ef-section-sub">Encrypted payloads, a dedicated entries table, native media handling, and S3-compatible direct uploads — wired up with the right primitives.</p>
+          <ul class="ef-check-list">
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span>Dedicated <code>wp_ep_entries</code> table — no postmeta soup</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span>Submission payloads encrypted at rest</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span>Admin-only access to entry review screens</li>
+            <li><span class="ef-ck"><svg viewBox="0 0 11 11" fill="none"><polyline points="1.5,5.5 4.5,8.5 9.5,2.5" stroke="#C6F432" stroke-width="1.6" stroke-linecap="round"></polyline></svg></span>S3, R2, and GCS direct uploads for file fields</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="ef-panel-dark">
+            <div class="ef-panel-bar">
+              <div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div>
+              <span class="ef-panel-bar-title">Storage Surfaces</span>
+            </div>
+            <div class="ef-panel-body">
+              <div class="ef-sec-grid">
+                <div class="ef-sec-card" style="border-color: var(--ef-primary-border);">
+                  <div class="ef-sec-tag" style="background: var(--ef-primary-dim); color: var(--ef-primary);">ENCRYPTED</div>
+                  <h4>Entries Table</h4>
+                  <p>Custom <code>wp_ep_entries</code> table. Payloads encrypted via crypto service.</p>
+                </div>
+                <div class="ef-sec-card">
+                  <div class="ef-sec-tag" style="background: var(--ef-accent3-dim); color: var(--ef-accent3);">NATIVE</div>
+                  <h4>WP Media Library</h4>
+                  <p>File uploads stored as attachments via the standard media workflow.</p>
+                </div>
+                <div class="ef-sec-card">
+                  <div class="ef-sec-tag" style="background: var(--ef-amber-dim); color: var(--ef-amber);">S3-COMPAT</div>
+                  <h4>Direct Object Storage</h4>
+                  <p>AWS S3, Cloudflare R2, and GCS interop. Public Base URL configurable per provider.</p>
+                </div>
+                <div class="ef-sec-card">
+                  <div class="ef-sec-tag" style="background: var(--ef-secondary-dim); color: var(--ef-secondary);">VAULTED</div>
+                  <h4>Gateway Credentials</h4>
+                  <p>Stripe, Braintree, PayPal, and Square secrets stored in WP options, encrypted before persistence.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REST API -->
+  <section id="api">
+    <div class="ef-page">
+      <div class="ef-two-col">
+        <div>
+          <div class="ef-section-label">REST API</div>
+          <h2 class="ef-section-heading">Submission as<br>a <em>contract.</em></h2>
+          <p class="ef-section-sub">A dedicated REST namespace handles submissions, payment intents, stats, notifications, retention, and webhook settings — built to integrate, not to wrap.</p>
+          <div style="margin-top:24px;padding:16px 18px;background:var(--ef-bg3);border:1px solid var(--ef-border-bright);border-radius:10px;">
+            <div style="font-family:var(--ef-mono);font-size:11px;color:var(--ef-faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">Namespace</div>
+            <div style="font-family:var(--ef-mono);font-size:14px;color:var(--ef-primary);">/wp-json/enterprise-forms/v1/</div>
+          </div>
+        </div>
+
+        <div class="ef-panel-dark">
+          <div class="ef-panel-bar">
+            <div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div><div class="ef-panel-bar-dot"></div>
+            <span class="ef-panel-bar-title">enterprise-forms/v1 · endpoints</span>
+          </div>
+          <div style="padding: 8px 0;">
+            <table class="ef-rest-table">
+              <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><span class="ef-method-badge ef-method-post">POST</span></td><td>/entries/{form_id}</td><td>Public submission</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/entries/{form_id}</td><td>Admin entry list</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/stats</td><td>Dashboard metrics</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/forms/entry-counts</td><td>Per-form counts</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/notifications/statuses</td><td>Notification state</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/payments/settings</td><td>Gateway settings</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-post">POST</span></td><td>/payments/settings</td><td>Update gateway settings</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/governance/settings</td><td>Retention settings</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-post">POST</span></td><td>/governance/settings</td><td>Update retention</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-get">GET</span></td><td>/integrations/webhooks</td><td>Webhook settings</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-post">POST</span></td><td>/integrations/webhooks</td><td>Update webhooks</td></tr>
+                <tr><td><span class="ef-method-badge ef-method-post">POST</span></td><td>/payment-intent</td><td>Prepare payment</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="ef-cta-section">
+    <div class="ef-page">
+      <h2>Ship forms like<br>you <em>mean it.</em></h2>
+      <p>Enterprise Forms is free, open source, and ready for production. No license keys. No upsells. No SaaS.</p>
+      <div class="ef-hero-buttons">
+        <a href="https://github.com/tporret/enterprise-forms" class="ef-btn-primary">Download Free →</a>
+        <a href="https://github.com/tporret/enterprise-forms" class="ef-btn-ghost">View on GitHub</a>
+      </div>
+      <div style="margin-top:32px;font-size:13px;color:var(--ef-faint);font-family:var(--ef-mono);">GPLv2 · Requires WordPress 6.5+ and PHP 8.2+ · Stripe, Braintree, PayPal &amp; Square checkout</div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="ef-collab-footer">
+    <div class="ef-page">
+      <div class="ef-collab-brand">Enterprise<span>Forms</span></div>
+      <p class="ef-collab-copy">Built by <a href="https://porretto.com">porretto.com</a> in collaboration with GitHub Copilot, Gemini, Claude, and GPT.</p>
+      <div class="ef-collab-links" aria-label="AI collaboration links">
+        <a href="https://github.com/features/copilot" target="_blank" rel="noopener noreferrer" class="ef-collab-chip ef-is-copilot"><span class="ef-collab-icon" aria-hidden="true">GH</span><span>Copilot</span></a>
+        <a href="https://gemini.google.com" target="_blank" rel="noopener noreferrer" class="ef-collab-chip ef-is-gemini"><span class="ef-collab-icon" aria-hidden="true">GM</span><span>Gemini</span></a>
+        <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" class="ef-collab-chip ef-is-claude"><span class="ef-collab-icon" aria-hidden="true">CL</span><span>Claude</span></a>
+        <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" class="ef-collab-chip ef-is-gpt"><span class="ef-collab-icon" aria-hidden="true">GPT</span><span>GPT</span></a>
+      </div>
+    </div>
+  </footer>
+</div>
