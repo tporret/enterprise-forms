@@ -4,7 +4,7 @@ Tags: forms, form builder, payments, block editor, rest api
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,7 +22,7 @@ Use it to create forms, publish them with a block, collect submissions through c
 * Block-based form builder with support for common field types.
 * Frontend rendering through the Enterprise Form block.
 * Encrypted submission payload storage.
-* File upload handling using native WordPress media tools.
+* Protected file upload storage with randomized file names and single-use upload tokens.
 * Payment Checkout block with Stripe, Braintree, PayPal, and Square support.
 * Encrypted payment credential storage with secret values hidden from settings responses.
 * Per-form notification controls with fallback to the site admin email.
@@ -44,6 +44,16 @@ The builder now includes per-form controls for:
 * Duplicate submission lock window in seconds.
 
 Default values are honeypot enabled, 10 submissions, 60-second rate window, and 300-second duplicate lock window.
+
+Public file upload requests and submission-context requests are additionally rate limited per IP address, defaulting to 20 uploads and 30 context requests per 5 minutes. Both limits can be adjusted with the `ep_forms_upload_rate_limit`, `ep_forms_upload_rate_window`, `ep_forms_submission_context_rate_limit`, and `ep_forms_submission_context_rate_window` filters.
+
+= File uploads =
+
+Local uploads are stored in `wp-content/uploads/ep-uploads/` with randomized file names. The plugin writes a deny-all `.htaccess` and an `index.php` into that directory on activation and on first upload, so submitted files are not served directly by Apache.
+
+On nginx the `.htaccess` file is ignored, so add a matching `location ~* /uploads/ep-uploads/ { deny all; }` rule to the server configuration.
+
+Upload requests must reference a published form and a file field that exists on that form. Upload tokens are single-use and sent in the `X-EP-Upload-Token` header, and uploaded content is re-verified server-side against the field's accepted file types.
 
 = Data governance =
 
@@ -153,6 +163,17 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 
 == Changelog ==
 
+= 1.2.2 =
+
+* Security: forced integer form IDs through the upload intent and upload handlers, removing a path traversal in the local upload directory.
+* Security: protected the local upload directory with a deny-all `.htaccess` and `index.php`, and randomized stored file names so submitted files are not publicly guessable.
+* Security: restricted upload intents to published forms and to file fields that exist on the requested form, removing the permissive default file type fallback.
+* Security: added per-IP rate limiting to the file upload and submission-context endpoints.
+* Security: moved local upload tokens out of the request URL into the `X-EP-Upload-Token` header, validated them in the route permission callback, and stored them as keyed hashes.
+* Security: escaped spreadsheet formula characters in entry CSV exports.
+* Security: resolved notification attachment paths with `realpath()` containment checks.
+* Synced release metadata to `1.2.2` in plugin header/constants, package metadata, block metadata, and readme files.
+
 = 1.2.1 =
 
 * Version bump release.
@@ -218,6 +239,10 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.2.2 =
+
+Security release for the form submission path. Recommended for all sites that accept file uploads or export entries to CSV. Sites running nginx should add a deny rule for `/uploads/ep-uploads/`.
 
 = 1.2.1 =
 

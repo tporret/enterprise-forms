@@ -997,12 +997,12 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$stream->fputcsv( $headers );
+		$stream->fputcsv( array_map( [ $this, 'escape_csv_value' ], $headers ) );
 
 		foreach ( $export_rows as $row ) {
 			$csv_row = [];
 			foreach ( $headers as $header ) {
-				$csv_row[] = $row[ $header ] ?? '';
+				$csv_row[] = $this->escape_csv_value( $row[ $header ] ?? '' );
 			}
 			$stream->fputcsv( $csv_row );
 		}
@@ -1391,6 +1391,19 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		return $columns;
+	}
+
+	/**
+	 * Neutralise spreadsheet formula injection in exported cells.
+	 */
+	private function escape_csv_value( mixed $value ): string {
+		$value = (string) $value;
+
+		if ( '' !== $value && in_array( $value[0], [ '=', '+', '-', '@', "\t", "\r" ], true ) ) {
+			return "'" . $value;
+		}
+
+		return $value;
 	}
 
 	/**

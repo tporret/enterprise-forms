@@ -70,8 +70,9 @@ class EP_Cloud_Storage {
 	 */
 	protected static function generate_local_presigned_url( $file_name, $mime_type, $file_size, $form_id, string $field_name = '', array $allowed_types = [], int $max_size = 0, string $checksum = '' ): array {
 		// Create a secure upload token valid for 1 hour
-		$token = wp_generate_password( 32, true, true );
+		$token = wp_generate_password( 32, false, false );
 		$expires = time() + 3600;
+		$form_id = absint( $form_id );
 
 		// Store token in transient
 		$upload_data = [
@@ -88,19 +89,27 @@ class EP_Cloud_Storage {
 			'uploaded_at' => current_time( 'mysql' ),
 		];
 
-		set_transient( "ep_upload_token_$token", wp_json_encode( $upload_data ), 3600 );
+		set_transient( self::upload_token_key( $token ), wp_json_encode( $upload_data ), 3600 );
 
 		$upload_url = get_rest_url( null, 'enterprise-forms/v1/upload' );
 
 		return [
-			'url'           => add_query_arg( 'token', $token, $upload_url ),
+			'url'           => $upload_url,
 			'headers'       => [
-				'Content-Type' => $mime_type,
+				'Content-Type'       => $mime_type,
+				'X-EP-Upload-Token'  => $token,
 			],
 			'expires_in'    => 3600,
 			'storage_path'  => "ep-uploads/$form_id/" . sanitize_file_name( $file_name ),
 			'method'        => 'PUT',
 		];
+	}
+
+	/**
+	 * Transient key for a local upload token. The raw token is never stored.
+	 */
+	public static function upload_token_key( string $token ): string {
+		return 'ep_upload_token_' . hash_hmac( 'sha256', $token, wp_salt( 'nonce' ) );
 	}
 
 	/**

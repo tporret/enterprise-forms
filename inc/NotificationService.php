@@ -263,7 +263,7 @@ class NotificationService {
 
 				if ( $attachment_id > 0 ) {
 					$attached_file = get_attached_file( $attachment_id );
-					$path = is_string( $attached_file ) ? $attached_file : '';
+					$path = is_string( $attached_file ) ? $this->resolve_upload_path( $attached_file ) : '';
 				} elseif ( isset( $item['url'] ) && is_string( $item['url'] ) ) {
 					$path = $this->local_upload_url_to_path( $item['url'] );
 				}
@@ -287,14 +287,36 @@ class NotificationService {
 		}
 
 		$relative_path = ltrim( substr( $url, strlen( $base_url ) ), '/' );
-		$path = wp_normalize_path( trailingslashit( $base_dir ) . $relative_path );
-		$base = wp_normalize_path( trailingslashit( $base_dir ) );
 
-		if ( ! str_starts_with( $path, $base ) ) {
+		return $this->resolve_upload_path( trailingslashit( $base_dir ) . $relative_path );
+	}
+
+	/**
+	 * Resolve a path and confirm it really sits inside the uploads directory.
+	 */
+	private function resolve_upload_path( string $path ): string {
+		$upload_dir = wp_upload_dir();
+		$base_dir = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+
+		if ( '' === $base_dir ) {
 			return '';
 		}
 
-		return $path;
+		$real_path = realpath( $path );
+		$real_base = realpath( $base_dir );
+
+		if ( false === $real_path || false === $real_base ) {
+			return '';
+		}
+
+		$real_path = wp_normalize_path( $real_path );
+		$real_base = trailingslashit( wp_normalize_path( $real_base ) );
+
+		if ( ! str_starts_with( $real_path, $real_base ) ) {
+			return '';
+		}
+
+		return $real_path;
 	}
 
 	/**

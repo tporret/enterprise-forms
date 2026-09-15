@@ -3,7 +3,7 @@
  * Plugin Name:       Enterprise Forms
  * Plugin URI:        https://enterprise-forms.com
  * Description:       Modern WordPress forms with a full-screen admin, frontend block rendering, encrypted submissions, and native payments.
- * Version:           1.2.1
+ * Version:           1.2.2
  * Requires at least: 6.5
  * Requires PHP:      8.2
  * Author:            tporret
@@ -96,7 +96,7 @@ class Plugin {
 	}
 
 	private function define_constants(): void {
-		define( 'EP_FORMS_VERSION', '1.2.1' );
+		define( 'EP_FORMS_VERSION', '1.2.2' );
 		define( 'EP_FORMS_PATH', plugin_dir_path( __FILE__ ) );
 		define( 'EP_FORMS_URL', plugin_dir_url( __FILE__ ) );
 	}

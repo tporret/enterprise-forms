@@ -37,10 +37,10 @@ class RestApi {
 				],
 				'form_id' => [
 					'required'          => true,
-					'sanitize_callback' => 'sanitize_text_field',
+					'sanitize_callback' => 'absint',
 				],
 				'field_name' => [
-					'required'          => false,
+					'required'          => true,
 					'sanitize_callback' => 'sanitize_key',
 				],
 				'checksum' => [
@@ -186,9 +186,25 @@ class RestApi {
 	/**
 	 * Check if upload token is valid.
 	 */
-	public function check_upload_token_permissions(): bool {
-		// Token validation is handled per-request via query parameters
+	public function check_upload_token_permissions( \WP_REST_Request $request ): bool|\WP_Error {
+		require_once plugin_dir_path( __FILE__ ) . 'class-ep-cloud-storage.php';
+
+		$token = $this->upload_token_from_request( $request );
+
+		if ( '' === $token || false === get_transient( \EP_Cloud_Storage::upload_token_key( $token ) ) ) {
+			Observability::increment_metric( 'upload_rejects' );
+			return new \WP_Error(
+				'invalid_token',
+				__( 'Upload token is invalid or expired.', 'enterprise-forms' ),
+				[ 'status' => 401 ]
+			);
+		}
+
 		return true;
+	}
+
+	private function upload_token_from_request( \WP_REST_Request $request ): string {
+		return sanitize_text_field( (string) $request->get_header( 'x_ep_upload_token' ) );
 	}
 
 	/**
@@ -199,12 +215,12 @@ class RestApi {
 		$file_name = $request->get_param( 'file_name' );
 		$mime_type = $request->get_param( 'mime_type' );
 		$file_size = $request->get_param( 'file_size' );
-		$form_id   = $request->get_param( 'form_id' );
+		$form_id   = absint( $request->get_param( 'form_id' ) );
 		$field_name = sanitize_key( (string) $request->get_param( 'field_name' ) );
 		$checksum = sanitize_text_field( (string) $request->get_param( 'checksum' ) );
 
 		// Validate all required parameters
-		if ( ! $file_name || ! $mime_type || ! $file_size || ! $form_id ) {
+		if ( ! $file_name || ! $mime_type || ! $file_size || $form_id <= 0 || '' === $field_name ) {
 			return rest_ensure_response(
 				new \WP_Error(
 					'missing_parameters',
@@ -216,7 +232,7 @@ class RestApi {
 
 		// Get form to extract upload settings
 		$form_post = get_post( $form_id );
-		if ( ! $form_post || $form_post->post_type !== 'ep_form' ) {
+		if ( ! $form_post || $form_post->post_type !== 'ep_form' || 'publish' !== $form_post->post_status ) {
 			return rest_ensure_response(
 				new \WP_Error(
 					'invalid_form',
@@ -224,6 +240,12 @@ class RestApi {
 					[ 'status' => 404 ]
 				)
 			);
+		}
+
+		$rate_limited = $this->check_upload_rate_limit();
+		if ( is_wp_error( $rate_limited ) ) {
+			Observability::increment_metric( 'upload_rejects' );
+			return rest_ensure_response( $rate_limited );
 		}
 
 		$schema_raw = get_post_meta( $form_id, 'ep_form_schema', true );
@@ -302,15 +324,8 @@ class RestApi {
 			$upload_fields[] = $field;
 		}
 
-		if ( '' !== $requested_field_name && empty( $upload_fields ) ) {
-			return new \WP_Error( 'invalid_upload_field', __( 'Upload field is not part of this form.', 'enterprise-forms' ) );
-		}
-
 		if ( empty( $upload_fields ) ) {
-			return [
-				'allowed_types' => [ 'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png' ],
-				'max_size'      => 10 * 1024 * 1024,
-			];
+			return new \WP_Error( 'invalid_upload_field', __( 'Upload field is not part of this form.', 'enterprise-forms' ) );
 		}
 
 		$allowed_types = [];
@@ -375,9 +390,9 @@ class RestApi {
 	 */
 	public function handle_direct_upload( \WP_REST_Request $request ): \WP_REST_Response {
 		$correlation_id = Observability::correlation_id();
-		$token = $request->get_param( 'token' );
+		$token = $this->upload_token_from_request( $request );
 
-		if ( ! $token ) {
+		if ( '' === $token ) {
 			return rest_ensure_response(
 				new \WP_Error(
 					'missing_token',
@@ -387,8 +402,16 @@ class RestApi {
 			);
 		}
 
-		$upload_data = json_decode( get_transient( "ep_upload_token_$token" ), true );
-		if ( ! $upload_data ) {
+		$rate_limited = $this->check_upload_rate_limit();
+		if ( is_wp_error( $rate_limited ) ) {
+			Observability::increment_metric( 'upload_rejects' );
+			return rest_ensure_response( $rate_limited );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-ep-cloud-storage.php';
+		$token_key = \EP_Cloud_Storage::upload_token_key( $token );
+		$upload_data = json_decode( (string) get_transient( $token_key ), true );
+		if ( ! is_array( $upload_data ) || absint( $upload_data['form_id'] ?? 0 ) <= 0 ) {
 			Observability::increment_metric( 'upload_rejects' );
 			return rest_ensure_response(
 				new \WP_Error(
@@ -398,7 +421,9 @@ class RestApi {
 				)
 			);
 		}
-		delete_transient( "ep_upload_token_$token" );
+		delete_transient( $token_key );
+
+		$form_id = absint( $upload_data['form_id'] );
 
 		// Get request body as file content
 		$file_content = $request->get_body();
@@ -429,26 +454,26 @@ class RestApi {
 		$allowed_types = isset( $upload_data['allowed_types'] ) && is_array( $upload_data['allowed_types'] )
 			? array_map( 'sanitize_key', $upload_data['allowed_types'] )
 			: [];
-		$detected_type = $this->validate_local_upload_content( $file_content, $file_name, $allowed_types );
+		$detected_extension = $this->validate_local_upload_content( $file_content, $file_name, $allowed_types );
 
-		if ( is_wp_error( $detected_type ) ) {
+		if ( is_wp_error( $detected_extension ) ) {
 			Observability::increment_metric( 'upload_rejects' );
-			Observability::log( 'warning', 'upload_content_rejected', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ), 'code' => $detected_type->get_error_code() ] );
+			Observability::log( 'warning', 'upload_content_rejected', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id, 'code' => $detected_extension->get_error_code() ] );
 			return rest_ensure_response(
 				new \WP_Error(
-					$detected_type->get_error_code(),
-					$detected_type->get_error_message(),
+					$detected_extension->get_error_code(),
+					$detected_extension->get_error_message(),
 					[ 'status' => 400 ]
 				)
 			);
 		}
 
 		$upload_dir = wp_upload_dir();
-		$ep_upload_dir = $upload_dir['basedir'] . '/ep-uploads/' . $upload_data['form_id'] . '/';
+		$ep_upload_dir = trailingslashit( EP_Installer::protect_upload_directory() ) . $form_id . '/';
 
 		// Create directory if it doesn't exist
 		if ( ! wp_mkdir_p( $ep_upload_dir ) ) {
-			Observability::log( 'error', 'upload_directory_failed', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ) ] );
+			Observability::log( 'error', 'upload_directory_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id ] );
 			return rest_ensure_response(
 				new \WP_Error(
 					'upload_dir_error',
@@ -458,13 +483,13 @@ class RestApi {
 			);
 		}
 
-		// Save the file
-		$stored_file_name = wp_unique_filename( $ep_upload_dir, $file_name );
+		// Stored names are randomised so uploads stay unguessable even where .htaccess is ignored.
+		$stored_file_name = wp_unique_filename( $ep_upload_dir, wp_generate_uuid4() . '.' . $detected_extension );
 		$file_path = $ep_upload_dir . $stored_file_name;
 		$bytes_written = file_put_contents( $file_path, $file_content );
 
 		if ( $bytes_written === false ) {
-			Observability::log( 'error', 'upload_write_failed', [ 'correlation_id' => $correlation_id, 'form_id' => (string) ( $upload_data['form_id'] ?? '' ) ] );
+			Observability::log( 'error', 'upload_write_failed', [ 'correlation_id' => $correlation_id, 'form_id' => $form_id ] );
 			return rest_ensure_response(
 				new \WP_Error(
 					'file_write_error',
@@ -476,13 +501,13 @@ class RestApi {
 
 		// Store metadata
 		require_once plugin_dir_path( __FILE__ ) . 'class-ep-cloud-storage.php';
-		$file_url = $upload_dir['baseurl'] . '/ep-uploads/' . $upload_data['form_id'] . '/' . $stored_file_name;
+		$file_url = $upload_dir['baseurl'] . '/ep-uploads/' . $form_id . '/' . $stored_file_name;
 
 		$metadata = \EP_Cloud_Storage::store_upload_metadata(
 			$file_url,
-			$stored_file_name,
+			$file_name,
 			$upload_data['file_size'],
-			$upload_data['form_id'],
+			(string) $form_id,
 			'',
 			sanitize_key( (string) ( $upload_data['field_name'] ?? '' ) ),
 			'uploaded',
@@ -513,6 +538,16 @@ class RestApi {
 			);
 		}
 
+		$rate_limited = $this->check_request_rate_limit(
+			'context',
+			(int) apply_filters( 'ep_forms_submission_context_rate_limit', 30 ),
+			(int) apply_filters( 'ep_forms_submission_context_rate_window', 5 * MINUTE_IN_SECONDS ),
+			__( 'Too many requests. Please wait a moment and try again.', 'enterprise-forms' )
+		);
+		if ( is_wp_error( $rate_limited ) ) {
+			return $rate_limited;
+		}
+
 		$submission_token = wp_generate_uuid4();
 		set_transient( $this->submission_token_key( $submission_token ), $form_id, 2 * HOUR_IN_SECONDS );
 
@@ -528,8 +563,9 @@ class RestApi {
 
 	/**
 	 * @param string[] $allowed_types
+	 * @return string|\WP_Error Detected file extension.
 	 */
-	private function validate_local_upload_content( string $file_content, string $file_name, array $allowed_types ): bool|\WP_Error {
+	private function validate_local_upload_content( string $file_content, string $file_name, array $allowed_types ): string|\WP_Error {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 
 		$temp_file = wp_tempnam( $file_name );
@@ -554,6 +590,40 @@ class RestApi {
 		if ( ! empty( $allowed_types ) && ! in_array( $extension, array_map( 'strtolower', $allowed_types ), true ) ) {
 			return new \WP_Error( 'file_type_not_allowed', __( 'Uploaded file type is not allowed for this field.', 'enterprise-forms' ) );
 		}
+
+		return $extension;
+	}
+
+	private function check_upload_rate_limit(): bool|\WP_Error {
+		return $this->check_request_rate_limit(
+			'upload',
+			(int) apply_filters( 'ep_forms_upload_rate_limit', 20 ),
+			(int) apply_filters( 'ep_forms_upload_rate_window', 5 * MINUTE_IN_SECONDS ),
+			__( 'Too many uploads. Please wait a moment and try again.', 'enterprise-forms' )
+		);
+	}
+
+	private function check_request_rate_limit( string $bucket, int $limit, int $window, string $message ): bool|\WP_Error {
+		$limit = max( 0, $limit );
+		$window = max( 0, $window );
+
+		if ( $limit < 1 || $window < 1 ) {
+			return true;
+		}
+
+		$ip_address = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( (string) $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$key = 'ep_rate_' . $bucket . '_' . hash_hmac( 'sha256', $ip_address, wp_salt( 'nonce' ) );
+		$count = absint( get_transient( $key ) );
+
+		if ( $count >= $limit ) {
+			return new \WP_Error(
+				'ep_forms_' . $bucket . '_rate_limited',
+				$message,
+				[ 'status' => 429 ]
+			);
+		}
+
+		set_transient( $key, $count + 1, $window );
 
 		return true;
 	}

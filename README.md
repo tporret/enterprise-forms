@@ -2,7 +2,7 @@
 
 Enterprise Forms is a modern WordPress forms plugin built around a full-screen React admin workstation, a block-based form builder, and a frontend renderer powered by the WordPress Interactivity API.
 
-Current plugin version: 1.2.1.
+Current plugin version: 1.2.2.
 
 It is designed for teams that want native WordPress primitives on the backend, a structured schema for forms, and a lean frontend runtime without relying on a third-party SaaS.
 
@@ -13,7 +13,7 @@ It is designed for teams that want native WordPress primitives on the backend, a
 - Frontend rendering through the `enterprise-forms/renderer` block.
 - Submission handling over custom REST endpoints.
 - Encrypted entry payload storage.
-- File upload support using native WordPress media handling.
+- Protected file upload storage with single-use upload tokens and randomized file names.
 - Native payment checkout with Stripe, Braintree, PayPal, and Square adapters.
 - Encrypted payment credential storage with public client config exposure only where required.
 - Per-form notification settings with admin-email fallback.
@@ -148,6 +148,22 @@ Enterprise Forms supports local WordPress uploads and S3-compatible direct uploa
 
 When using S3-compatible storage, configure the target bucket CORS policy to allow browser `PUT` requests from the WordPress site origin. If submitted file references should resolve through a public bucket URL, custom domain, or CDN, set the provider's Public Base URL in **Settings > File Storage**; otherwise stored references use the provider endpoint URL.
 
+Local upload security:
+
+- Uploads are written to `wp-content/uploads/ep-uploads/{form_id}/` and the base directory is provisioned with a deny-all `.htaccess` and an `index.php` on activation and on first upload.
+- Stored file names are randomized UUIDs with the detected extension, so submitted files stay unguessable even on servers that ignore `.htaccess`. The original file name is retained as metadata for the entry view and notification emails.
+- Upload intents are bound to an existing published form and to a file field that actually exists on that form; forms without a file field are rejected.
+- Upload tokens are single-use, are transmitted in the `X-EP-Upload-Token` request header rather than the query string, and are stored only as a keyed hash.
+- Uploaded content is re-checked server-side with `wp_check_filetype_and_ext()` against the field's accepted extensions, and the body length must match the validated intent.
+
+On nginx, `.htaccess` is not evaluated. Add an equivalent rule to the server config to block direct access:
+
+```nginx
+location ~* /uploads/ep-uploads/ {
+    deny all;
+}
+```
+
 ## Payments
 
 Enterprise Forms includes a payment adapter boundary so each gateway can prepare browser checkout, verify or capture the payment server-side, and return a normalized payment record before an entry is stored.
@@ -207,12 +223,23 @@ Runtime behavior:
 - Duplicate submission blocking uses the configured lock window.
 - Public nonce and submission-token replay protection remain enforced.
 
+Public endpoints outside the entry route are rate limited per IP as well:
+
+- File upload intent and upload delivery default to `20` requests per `300` seconds.
+- Submission-context requests, which mint the public nonce and submission token, default to `30` requests per `300` seconds.
+
+Request fingerprints are derived from `REMOTE_ADDR` only, because forwarded-for headers are client controlled. Sites behind a reverse proxy that rewrites `REMOTE_ADDR` to a shared address should raise these limits through the filters below.
+
 Developer hooks:
 
 - `ep_forms_honeypot_enabled`
 - `ep_forms_submission_rate_limit`
 - `ep_forms_submission_rate_window`
 - `ep_forms_duplicate_submission_window`
+- `ep_forms_upload_rate_limit`
+- `ep_forms_upload_rate_window`
+- `ep_forms_submission_context_rate_limit`
+- `ep_forms_submission_context_rate_window`
 
 ## Data Governance
 
@@ -295,12 +322,17 @@ Key routes include:
 - `GET /integrations/webhooks` for authenticated webhook settings
 - `POST /integrations/webhooks` for authenticated webhook settings updates
 - `POST /payment-intent` for public payment intent, client-token, or order preparation
+- `GET /submission-context/{form_id}` for the public submission nonce and one-time submission token
+- `POST /upload-intent` for file upload preparation
+- `PUT /upload` for local upload delivery, authorized by the `X-EP-Upload-Token` header
 
 ## Notes
 
 - The frontend renderer is a dynamic block, so displayed form output is generated from the saved schema.
 - Notifications can use explicitly configured recipients or fall back to the site admin email.
-- File uploads are stored as WordPress attachments.
+- Notification attachments are resolved through `realpath()` and must sit inside the uploads directory.
+- Entry exports escape leading `=`, `+`, `-`, `@`, tab, and carriage-return characters so spreadsheet applications do not evaluate submitted values as formulas.
+- File uploads are stored under the plugin's protected uploads directory with randomized file names.
 - Payment credentials are stored in WordPress options; secret values are encrypted using the plugin crypto service.
 - Webhook signing secrets are stored encrypted using the plugin crypto service.
 - Admin entry access is restricted to privileged users.

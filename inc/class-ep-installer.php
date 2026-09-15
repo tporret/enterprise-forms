@@ -52,6 +52,36 @@ class EP_Installer {
 		EP_Crypto::ensure_encryption_key();
 		EP_Crypto::mark_activation_notice_pending();
 		self::create_tables();
+		self::protect_upload_directory();
+	}
+
+	/**
+	 * Ensure the local upload directory exists and is not web readable.
+	 *
+	 * @return string Absolute path to the upload base directory.
+	 */
+	public static function protect_upload_directory(): string {
+		$upload_dir = wp_upload_dir();
+		$base_dir   = trailingslashit( (string) ( $upload_dir['basedir'] ?? '' ) ) . 'ep-uploads';
+
+		if ( ! wp_mkdir_p( $base_dir ) ) {
+			return $base_dir;
+		}
+
+		$htaccess = $base_dir . '/.htaccess';
+		if ( ! file_exists( $htaccess ) ) {
+			$rules = "Options -Indexes\n"
+				. "<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n"
+				. "<IfModule !mod_authz_core.c>\n\tOrder allow,deny\n\tDeny from all\n</IfModule>\n";
+			file_put_contents( $htaccess, $rules );
+		}
+
+		$index = $base_dir . '/index.php';
+		if ( ! file_exists( $index ) ) {
+			file_put_contents( $index, "<?php\n// Silence is golden.\n" );
+		}
+
+		return $base_dir;
 	}
 
 	/**
