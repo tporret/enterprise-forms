@@ -2,7 +2,12 @@
 
 Enterprise Forms is a modern WordPress forms plugin built around a full-screen React admin workstation, a block-based form builder, and a frontend renderer powered by the WordPress Interactivity API.
 
-Current plugin version: 1.2.2.
+Current plugin version: 1.2.3.
+
+## What's New in 1.2.3
+
+- Search indexing stores keyed tokens rather than plaintext submission values, and removes existing plaintext index entries during upgrade.
+- Webhook endpoints must use HTTPS to protect submission data in transit.
 
 It is designed for teams that want native WordPress primitives on the backend, a structured schema for forms, and a lean frontend runtime without relying on a third-party SaaS.
 

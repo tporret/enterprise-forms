@@ -154,7 +154,8 @@ class WebhookIntegrations {
 		$endpoints = [];
 		foreach ( $raw_endpoints as $endpoint ) {
 			$url = esc_url_raw( (string) $endpoint );
-			if ( '' !== $url && wp_http_validate_url( $url ) ) {
+			$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+			if ( 'https' === $scheme && wp_http_validate_url( $url ) ) {
 				$endpoints[] = $url;
 			}
 		}

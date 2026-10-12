@@ -12,6 +12,9 @@ use WP_REST_Server;
  * REST controller for form entries.
  */
 class EP_REST_Entries extends WP_REST_Controller {
+	private const SEARCH_INDEX_VERSION = 2;
+	private const SEARCH_INDEX_VERSION_OPTION = 'ep_forms_search_index_version';
+
 	private EP_Validator $validator;
 	private EP_Crypto $crypto;
 	private EP_REST_Payments $payments;
@@ -23,6 +26,15 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$this->validator = new EP_Validator();
 		$this->crypto    = new EP_Crypto();
 		$this->payments  = new EP_REST_Payments();
+	}
+
+	public static function migrate_legacy_search_index(): void {
+		if ( (int) get_option( self::SEARCH_INDEX_VERSION_OPTION, 1 ) >= self::SEARCH_INDEX_VERSION ) {
+			return;
+		}
+
+		$entries = new self();
+		$entries->ensure_search_table_exists();
 	}
 
 	public function register_routes(): void {
@@ -1351,22 +1363,26 @@ class EP_REST_Entries extends WP_REST_Controller {
 	}
 
 	private function build_fulltext_boolean_query( string $normalized_search ): string {
-		$parts = preg_split( '/\s+/', trim( $normalized_search ) );
+		$parts = preg_split( '/[^a-z0-9_]+/i', trim( $normalized_search ), -1, PREG_SPLIT_NO_EMPTY );
 		if ( ! is_array( $parts ) ) {
 			return $normalized_search;
 		}
 
 		$tokens = [];
+		$search_key = wp_salt( 'auth' );
 		foreach ( $parts as $part ) {
-			$token = preg_replace( '/[^a-z0-9_\-.]/i', '', $part );
-			if ( null === $token || '' === $token ) {
+			$token = strtolower( substr( $part, 0, 64 ) );
+			if ( '' === $token ) {
 				continue;
 			}
 
 			$tokens[] = $token . '*';
+			for ( $prefix_length = 3, $token_length = strlen( $token ); $prefix_length <= $token_length; $prefix_length++ ) {
+				$tokens[] = hash_hmac( 'sha256', substr( $token, 0, $prefix_length ), $search_key );
+			}
 		}
 
-		return ! empty( $tokens ) ? implode( ' ', $tokens ) : $normalized_search;
+		return ! empty( $tokens ) ? implode( ' ', array_unique( $tokens ) ) : $normalized_search;
 	}
 
 	/**
@@ -1415,8 +1431,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$this->ensure_search_table_exists();
 
 		$search_table = $wpdb->prefix . 'ep_entry_search';
-		$payload_text = wp_json_encode( $payload );
-		$search_text = strtolower( implode( ' ', [ $status, $created_at, false === $payload_text ? '' : $payload_text ] ) );
+		$search_text = $this->build_search_index_text( $status, $created_at, $payload );
 
 		$wpdb->replace(
 			$search_table,
@@ -1429,6 +1444,26 @@ class EP_REST_Entries extends WP_REST_Controller {
 			],
 			[ '%d', '%d', '%s', '%s', '%s' ]
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function build_search_index_text( string $status, string $created_at, array $payload ): string {
+		$search_terms = [ strtolower( $status ), strtolower( $created_at ) ];
+		$search_key = wp_salt( 'auth' );
+		$payload_text = wp_json_encode( $payload );
+		if ( false !== $payload_text ) {
+			$payload_tokens = preg_split( '/[^a-z0-9_]+/i', strtolower( $payload_text ), -1, PREG_SPLIT_NO_EMPTY );
+			foreach ( array_unique( is_array( $payload_tokens ) ? $payload_tokens : [] ) as $token ) {
+				$token = substr( $token, 0, 64 );
+				for ( $prefix_length = 3, $token_length = strlen( $token ); $prefix_length <= $token_length; $prefix_length++ ) {
+					$search_terms[] = hash_hmac( 'sha256', substr( $token, 0, $prefix_length ), $search_key );
+				}
+			}
+		}
+
+		return implode( ' ', array_unique( $search_terms ) );
 	}
 
 	private function backfill_search_index_for_form( int $form_id ): void {
@@ -1469,6 +1504,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$search_table = $wpdb->prefix . 'ep_entry_search';
 		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $search_table ) );
 		if ( $table_exists === $search_table ) {
+			$this->migrate_search_index_privacy( $search_table );
 			$this->search_table_checked = true;
 			return;
 		}
@@ -1488,6 +1524,26 @@ class EP_REST_Entries extends WP_REST_Controller {
 		) {$charset_collate};";
 
 		dbDelta( $sql );
+		$this->migrate_search_index_privacy( $search_table );
 		$this->search_table_checked = true;
+	}
+
+	private function migrate_search_index_privacy( string $search_table ): void {
+		global $wpdb;
+
+		if ( (int) get_option( self::SEARCH_INDEX_VERSION_OPTION, 1 ) >= self::SEARCH_INDEX_VERSION ) {
+			return;
+		}
+
+		if ( false === $wpdb->query( "DELETE FROM {$search_table}" ) ) {
+			Observability::log( 'error', 'search_index_privacy_migration_failed', [ 'database_error' => $wpdb->last_error ] );
+			throw new Exception( esc_html__( 'Unable to remove the legacy plaintext entry search index. Check the database permissions and application logs.', 'enterprise-forms' ) );
+		}
+
+		update_option( self::SEARCH_INDEX_VERSION_OPTION, self::SEARCH_INDEX_VERSION, false );
+		if ( (int) get_option( self::SEARCH_INDEX_VERSION_OPTION, 0 ) !== self::SEARCH_INDEX_VERSION ) {
+			Observability::log( 'error', 'search_index_privacy_migration_failed', [ 'reason' => 'version_not_saved' ] );
+			throw new Exception( esc_html__( 'Unable to record the secure entry search index version. Check the database and application logs.', 'enterprise-forms' ) );
+		}
 	}
 }

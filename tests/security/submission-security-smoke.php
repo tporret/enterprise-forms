@@ -61,6 +61,30 @@ $entries = new EP_REST_Entries();
 $payments = new EP_REST_Payments();
 $form_id = 999999;
 
+$search_index_text_method = new ReflectionMethod( EP_REST_Entries::class, 'build_search_index_text' );
+$search_index_text_method->setAccessible( true );
+$private_search_payload = [ 'name' => 'Jane Example', 'email' => 'jane@example.com' ];
+$search_index_text = $search_index_text_method->invoke( $entries, 'unread', '2026-10-12 10:00:00', $private_search_payload );
+$search_index_query_method = new ReflectionMethod( EP_REST_Entries::class, 'build_fulltext_boolean_query' );
+$search_index_query_method->setAccessible( true );
+$search_query = $search_index_query_method->invoke( $entries, 'jane' );
+$assert( false !== strpos( $search_index_query, hash_hmac( 'sha256', 'jane', wp_salt( 'auth' ) ) ), 'Search queries should use keyed tokens for payload terms.' );
+$assert(
+	false === strpos( $search_index_text, 'jane@example.com' )
+	&& false === strpos( $search_index_text, 'jane' )
+	&& false === strpos( $search_index_text, 'example' ),
+	'Search index should not expose payload PII in plaintext.'
+);
+$assert( false !== strpos( $search_index_text, hash_hmac( 'sha256', 'jane', wp_salt( 'auth' ) ) ), 'Search index should contain the matching keyed token.' );
+
+$webhook_endpoints_method = new ReflectionMethod( EnterpriseForms\WebhookIntegrations::class, 'sanitize_endpoints' );
+$webhook_endpoints_method->setAccessible( true );
+$webhook_endpoints = $webhook_endpoints_method->invoke(
+	new EnterpriseForms\WebhookIntegrations(),
+	[ 'https://example.org/hook', 'http://example.org/hook' ]
+);
+$assert( [ 'https://example.org/hook' ] === $webhook_endpoints, 'Webhook settings should reject non-HTTPS endpoints.' );
+
 $no_nonce = $entries->create_item_permissions_check( $make_request( $form_id, [ 'hp_field' => '' ] ) );
 $assert( is_wp_error( $no_nonce ) && 403 === (int) $no_nonce->get_error_data()['status'], 'Empty honeypot without nonce should be rejected.' );
 

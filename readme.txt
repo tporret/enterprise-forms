@@ -4,7 +4,7 @@ Tags: forms, form builder, payments, block editor, rest api
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -163,6 +163,12 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 
 == Changelog ==
 
+= 1.2.3 =
+
+* Security: replaced plaintext submission values in the entry search index with keyed tokens and clear legacy plaintext index entries during upgrade.
+* Security: require HTTPS for outbound webhook endpoints to protect submission data in transit.
+* Synced release metadata to `1.2.3` in plugin header/constants, package metadata, block metadata, and readme files.
+
 = 1.2.2 =
 
 * Security: forced integer form IDs through the upload intent and upload handlers, removing a path traversal in the local upload directory.
@@ -239,6 +245,10 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.2.3 =
+
+Security update for entry search indexing and outbound webhooks. Upgrade to protect submission PII in storage and in transit.
 
 = 1.2.2 =
 
