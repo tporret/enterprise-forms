@@ -4,7 +4,7 @@ Tags: forms, form builder, payments, block editor, rest api
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -163,6 +163,13 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 
 == Changelog ==
 
+= 1.2.4 =
+
+* Added Inbox, Unread, Read, Spam, and Trash views with submission counts.
+* Added page-level selection and bulk read/unread, spam, Trash, restore, and confirmed permanent deletion actions.
+* Improved the responsive entry details panel with previous/next navigation and explicit read-status controls; submitted values remain read-only.
+* Kept dashboard counts and filtered CSV exports consistent with the entry views, with explicit per-entry action feedback.
+
 = 1.2.3 =
 
 * Security: replaced plaintext submission values in the entry search index with keyed tokens and clear legacy plaintext index entries during upgrade.
@@ -245,6 +252,10 @@ Yes. Open the Settings screen and use the Webhooks panel to enable delivery, add
 * Added built-in frontend themes.
 
 == Upgrade Notice ==
+
+= 1.2.4 =
+
+Improved entry review and bulk management. Restore returns trashed entries to Inbox as Unread. Permanent deletion removes entries and search indexes, but not associated uploaded files or payment records.
 
 = 1.2.3 =
 

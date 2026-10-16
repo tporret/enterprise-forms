@@ -4,21 +4,21 @@
 
 html,
 body {
-    margin: 0;
-    padding: 0;
+	margin: 0;
+	padding: 0;
 }
 
 #enterprise-forms-root {
-    min-height: 100vh;
-    font-family: "SF Pro Text", "Segoe UI", sans-serif;
+	min-height: 100vh;
+	font-family: "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 .ef-snackbar-list {
-    position: fixed;
-    bottom: 16px;
-    right: 16px;
-    left: auto;
-    z-index: 100000;
+	position: fixed;
+	bottom: 16px;
+	right: 16px;
+	left: auto;
+	z-index: 100000;
 }
 
 .ef-builder-canvas .block-editor-block-list__layout {
@@ -30,4 +30,65 @@ body {
 .ef-builder-canvas .block-editor-block-list__block.is-selected .ef-field-card {
 	border-color: #2563eb;
 	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.ef-entries fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.ef-entry-button {
+	border: 1px solid #cbd5e1;
+	border-radius: 6px;
+	background: #fff;
+	padding: 6px 10px;
+	color: #334155;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.ef-entry-button:hover:not(:disabled) {
+	background: #f1f5f9;
+}
+
+.ef-entries button:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.ef-entries :focus-visible {
+	outline: 2px solid #2563eb;
+	outline-offset: 2px;
+}
+
+.ef-entry-review-grid {
+	display: grid;
+	gap: 20px;
+}
+
+.ef-entry-details {
+	min-width: 0;
+	grid-row: 1;
+}
+
+@media (min-width: 1280px) {
+
+	.ef-entry-review-grid {
+		grid-template-columns: minmax(0, 1fr) minmax(320px, 0.65fr);
+		align-items: start;
+	}
+
+	.ef-entry-details {
+		grid-column: 2;
+		position: sticky;
+		top: 16px;
+		max-height: calc(100vh - 32px);
+		overflow-y: auto;
+	}
+
+	.ef-entry-review-grid > .min-w-0 {
+		grid-column: 1;
+		grid-row: 1;
+	}
 }

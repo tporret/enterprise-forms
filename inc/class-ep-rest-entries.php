@@ -147,7 +147,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			[
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
-					'callback'            => [ $this, 'update_item_status' ],
+					'callback'            => [ $this, 'update_entry_status' ],
 					'permission_callback' => [ $this, 'update_status_permissions_check' ],
 					'args'                => [
 						'entry_id' => [
@@ -165,20 +165,34 @@ class EP_REST_Entries extends WP_REST_Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/(?P<entry_id>\\d+)/status',
+			'/' . $this->rest_base . '/(?P<form_id>\\d+)/bulk',
 			[
 				[
-					'methods'             => WP_REST_Server::EDITABLE,
-					'callback'            => [ $this, 'update_entry_status' ],
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'bulk_update_items' ],
 					'permission_callback' => [ $this, 'update_status_permissions_check' ],
 					'args'                => [
-						'entry_id' => [
-							'required'          => true,
-							'sanitize_callback' => 'absint',
+						'form_id' => [
+							'required' => true,
+							'type'     => 'integer',
+							'minimum'  => 1,
 						],
-						'status' => [
-							'required'          => true,
-							'sanitize_callback' => 'sanitize_key',
+						'ids' => [
+							'required'    => true,
+							'type'        => 'array',
+							'minItems'    => 1,
+							'maxItems'    => 100,
+							'uniqueItems' => true,
+							'items'       => [ 'type' => 'integer', 'minimum' => 1 ],
+						],
+						'action' => [
+							'required' => true,
+							'type'     => 'string',
+							'enum'     => [ 'read', 'unread', 'spam', 'trash', 'restore', 'delete' ],
+						],
+						'confirm_delete' => [
+							'type'    => 'boolean',
+							'default' => false,
 						],
 					],
 				],
@@ -882,7 +896,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$total       = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} {$where_sql}", $args ) );
 
 			$data_args = array_merge( $args, [ $limit, $offset ] );
-			$rows       = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
+			$rows       = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
 
 			$items = [];
 			foreach ( (array) $rows as $row ) {
@@ -903,7 +917,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where}", $search_args ) );
 
 			$data_args = array_merge( $search_args, [ $limit, $offset ] );
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.form_id, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.form_id, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC, e.id DESC LIMIT %d OFFSET %d", $data_args ), ARRAY_A );
 
 			$items = [];
 			foreach ( (array) $rows as $row ) {
@@ -911,7 +925,24 @@ class EP_REST_Entries extends WP_REST_Controller {
 			}
 		}
 
+		if ( '' !== $wpdb->last_error ) {
+			return new WP_Error( 'ep_forms_entries_query_failed', __( 'Unable to load entries. Please try again.', 'enterprise-forms' ), [ 'status' => 500 ] );
+		}
 		$total_pages = (int) ceil( $total / $limit );
+		$count_rows = $wpdb->get_results(
+			$wpdb->prepare( "SELECT status, COUNT(*) AS count FROM {$table_name} WHERE form_id = %d GROUP BY status", $form_id ),
+			ARRAY_A
+		);
+		if ( null === $count_rows ) {
+			return new WP_Error( 'ep_forms_entry_counts_failed', __( 'Unable to load entry counts. Please try again.', 'enterprise-forms' ), [ 'status' => 500 ] );
+		}
+		$counts = [ 'inbox' => 0, 'unread' => 0, 'read' => 0, 'spam' => 0, 'trash' => 0 ];
+		foreach ( (array) $count_rows as $count_row ) {
+			$counts[ $count_row['status'] ] = (int) $count_row['count'];
+			if ( ! in_array( $count_row['status'], [ 'spam', 'trash' ], true ) ) {
+				$counts['inbox'] += (int) $count_row['count'];
+			}
+		}
 
 		$response = new WP_REST_Response(
 			[
@@ -920,6 +951,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 				'limit'       => $limit,
 				'total'       => $total,
 				'total_pages' => max( 1, $total_pages ),
+				'counts'      => $counts,
+				'can_edit'    => current_user_can( Permissions::EDIT_FORMS ),
+				'can_export'  => current_user_can( Permissions::EXPORT_ENTRIES ),
 			],
 			200
 		);
@@ -949,7 +983,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		}
 
 		if ( '' === $normalized_search ) {
-			$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC", $args ), ARRAY_A );
+			$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, status, payload, created_at FROM {$table_name} {$where_sql} ORDER BY created_at DESC, id DESC", $args ), ARRAY_A );
 		} else {
 			$search_table = $wpdb->prefix . 'ep_entry_search';
 			[ $search_where, $search_args ] = $this->build_entries_where_clause( $form_id, $status, $date_from, $date_to, 'e' );
@@ -960,7 +994,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			$search_args[] = $like_search;
 			$search_args[] = $like_search;
 
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC", $search_args ), ARRAY_A );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.uuid, e.status, e.payload, e.created_at FROM {$table_name} e LEFT JOIN {$search_table} es ON es.entry_id = e.id {$search_where} ORDER BY e.created_at DESC, e.id DESC", $search_args ), ARRAY_A );
 		}
 
 		$default_headers = [ 'entry_id', 'entry_uuid', 'status', 'created_at' ];
@@ -1061,7 +1095,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 
 		$entry_id = absint( $request['entry_id'] );
 		$status = sanitize_key( (string) $request->get_param( 'status' ) );
-		$allowed_statuses = [ 'unread', 'read', 'spam' ];
+		$allowed_statuses = [ 'unread', 'read', 'spam', 'trash' ];
 
 		if ( $entry_id <= 0 ) {
 			return new WP_Error(
@@ -1112,7 +1146,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 			);
 		}
 
-		$this->upsert_entry_search_index(
+		$indexed = $this->upsert_entry_search_index(
 			$entry_id,
 			(int) $entry['form_id'],
 			$status,
@@ -1131,6 +1165,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 				'new_status'  => $status,
 			]
 		);
+		if ( ! $indexed ) {
+			return new WP_Error( 'ep_forms_entry_index_failed', __( 'The entry status was saved, but its search index could not be updated. Refresh and retry.', 'enterprise-forms' ), [ 'status' => 500 ] );
+		}
 
 		return new WP_REST_Response(
 			[
@@ -1142,83 +1179,71 @@ class EP_REST_Entries extends WP_REST_Controller {
 		);
 	}
 
-	public function update_item_status( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+	public function bulk_update_items( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		global $wpdb;
 
-		$entry_id = absint( $request['entry_id'] );
-		$status = sanitize_key( (string) $request->get_param( 'status' ) );
-		$allowed_statuses = [ 'unread', 'read', 'spam' ];
-
-		if ( $entry_id <= 0 || ! in_array( $status, $allowed_statuses, true ) ) {
-			return new WP_Error(
-				'ep_forms_invalid_entry_status',
-				__( 'Invalid entry status.', 'enterprise-forms' ),
-				[ 'status' => 400 ]
-			);
+		$form_id = (int) $request['form_id'];
+		$ids = $request->get_param( 'ids' );
+		$action = (string) $request->get_param( 'action' );
+		if ( ! is_array( $ids ) || count( $ids ) < 1 || count( $ids ) > 100
+			|| ! in_array( $action, [ 'read', 'unread', 'spam', 'trash', 'restore', 'delete' ], true ) ) {
+			return new WP_Error( 'ep_forms_invalid_bulk_action', __( 'Choose an action and between 1 and 100 entries.', 'enterprise-forms' ), [ 'status' => 400 ] );
+		}
+		if ( 'delete' === $action && true !== $request->get_param( 'confirm_delete' ) ) {
+			return new WP_Error( 'ep_forms_delete_confirmation_required', __( 'Confirm permanent deletion before continuing.', 'enterprise-forms' ), [ 'status' => 400 ] );
 		}
 
-		$table_name = $wpdb->prefix . 'ep_entries';
-		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT id, uuid, form_id, status, payload, created_at FROM {$table_name} WHERE id = %d LIMIT 1",
-				$entry_id
-			),
-			ARRAY_A
-		);
+		$updated = [];
+		$errors = [];
+		$table = $wpdb->prefix . 'ep_entries';
+		$search_table = $wpdb->prefix . 'ep_entry_search';
+		foreach ( array_unique( array_map( 'absint', $ids ) ) as $id ) {
+			$entry = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM {$table} WHERE id = %d AND form_id = %d", $id, $form_id ), ARRAY_A );
+			if ( ! is_array( $entry ) ) {
+				$errors[] = [ 'id' => $id, 'message' => __( 'Entry not found in this form.', 'enterprise-forms' ) ];
+				continue;
+			}
+			if ( ( in_array( $action, [ 'restore', 'delete' ], true ) && 'trash' !== $entry['status'] )
+				|| ( 'trash' === $entry['status'] && ! in_array( $action, [ 'restore', 'delete' ], true ) ) ) {
+				$errors[] = [ 'id' => $id, 'message' => __( 'Only trashed entries can be restored or permanently deleted. Restore an entry before changing its status.', 'enterprise-forms' ) ];
+				continue;
+			}
+			if ( 'delete' === $action ) {
+				// Delete the index first so a failed cleanup never leaves searchable data behind.
+				$index_deleted = $wpdb->delete( $search_table, [ 'entry_id' => $id ], [ '%d' ] );
+				$deleted = false === $index_deleted ? false : $wpdb->delete( $table, [ 'id' => $id, 'form_id' => $form_id, 'status' => 'trash' ], [ '%d', '%d', '%s' ] );
+				if ( false === $deleted || 0 === $deleted ) {
+					$errors[] = [ 'id' => $id, 'message' => __( 'Unable to permanently delete entry.', 'enterprise-forms' ) ];
+					continue;
+				}
+				AuditLog::record( 'entry_deleted', 'entry', $id, [ 'form_id' => $form_id ] );
+			} else {
+				$status_request = new WP_REST_Request( 'POST' );
+				$status_request->set_param( 'entry_id', $id );
+				$status_request->set_param( 'status', 'restore' === $action ? 'unread' : $action );
+				$result = $this->update_entry_status( $status_request );
+				if ( is_wp_error( $result ) ) {
+					$errors[] = [ 'id' => $id, 'message' => $result->get_error_message() ];
+					continue;
+				}
+			}
+			$updated[] = $id;
+		}
+		return new WP_REST_Response( [ 'updated' => $updated, 'errors' => $errors ], 200 );
+	}
 
+	public function update_item_status( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$result = $this->update_entry_status( $request );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, uuid, form_id, status, payload, created_at FROM {$wpdb->prefix}ep_entries WHERE id = %d", (int) $request['entry_id'] ), ARRAY_A );
 		if ( ! is_array( $row ) ) {
-			return new WP_Error(
-				'ep_forms_entry_not_found',
-				__( 'Entry not found.', 'enterprise-forms' ),
-				[ 'status' => 404 ]
-			);
+			return new WP_Error( 'ep_forms_entry_not_found', __( 'Entry not found.', 'enterprise-forms' ), [ 'status' => 404 ] );
 		}
-
-		$updated = $wpdb->update(
-			$table_name,
-			[ 'status' => $status ],
-			[ 'id' => $entry_id ],
-			[ '%s' ],
-			[ '%d' ]
-		);
-
-		if ( false === $updated ) {
-			return new WP_Error(
-				'ep_forms_entry_update_failed',
-				__( 'Unable to update the entry status.', 'enterprise-forms' ),
-				[ 'status' => 500 ]
-			);
-		}
-
-		$payload = $this->decrypt_entry_payload( (string) $row['payload'] );
-		$this->upsert_entry_search_index(
-			$entry_id,
-			(int) $row['form_id'],
-			$status,
-			(string) $row['created_at'],
-			$payload
-		);
-
-		AuditLog::record(
-			'entry_status_updated',
-			'entry',
-			$entry_id,
-			[
-				'form_id'     => (int) $row['form_id'],
-				'entry_uuid'  => (string) $row['uuid'],
-				'old_status'  => (string) $row['status'],
-				'new_status'  => $status,
-			]
-		);
-
-		$row['status'] = $status;
-
-		return new WP_REST_Response(
-			[
-				'item' => $this->prepare_entry_item( $row ),
-			],
-			200
-		);
+		return new WP_REST_Response( [ 'item' => $this->prepare_entry_item( $row ) ], 200 );
 	}
 
 	/**
@@ -1290,7 +1315,9 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$where_sql = "WHERE {$prefix}form_id = %d";
 		$args      = [ $form_id ];
 
-		if ( '' !== $status ) {
+		if ( 'inbox' === $status ) {
+			$where_sql .= " AND {$prefix}status NOT IN ('spam', 'trash')";
+		} elseif ( '' !== $status ) {
 			$where_sql .= " AND {$prefix}status = %s";
 			$args[] = $status;
 		}
@@ -1425,7 +1452,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 	/**
 	 * @param array<string, mixed> $payload
 	 */
-	private function upsert_entry_search_index( int $entry_id, int $form_id, string $status, string $created_at, array $payload ): void {
+	private function upsert_entry_search_index( int $entry_id, int $form_id, string $status, string $created_at, array $payload ): bool {
 		global $wpdb;
 
 		$this->ensure_search_table_exists();
@@ -1433,7 +1460,7 @@ class EP_REST_Entries extends WP_REST_Controller {
 		$search_table = $wpdb->prefix . 'ep_entry_search';
 		$search_text = $this->build_search_index_text( $status, $created_at, $payload );
 
-		$wpdb->replace(
+		return false !== $wpdb->replace(
 			$search_table,
 			[
 				'entry_id' => $entry_id,

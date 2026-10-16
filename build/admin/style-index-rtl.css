@@ -532,6 +532,17 @@ video {
     max-width: 1536px;
   }
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 .static {
   position: static;
 }
@@ -574,6 +585,9 @@ video {
 }
 .mb-8 {
   margin-bottom: 2rem;
+}
+.ml-1 {
+  margin-right: 0.25rem;
 }
 .ml-3 {
   margin-right: 0.75rem;
@@ -809,6 +823,9 @@ video {
 .whitespace-pre-wrap {
   white-space: pre-wrap;
 }
+.break-words {
+  overflow-wrap: break-word;
+}
 .break-all {
   word-break: break-all;
 }
@@ -889,6 +906,13 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
 }
+.bg-amber-50\/40 {
+  background-color: rgb(255 251 235 / 0.4);
+}
+.bg-blue-50 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(239 246 255 / var(--tw-bg-opacity, 1));
+}
 .bg-emerald-50 {
   --tw-bg-opacity: 1;
   background-color: rgb(236 253 245 / var(--tw-bg-opacity, 1));
@@ -932,9 +956,6 @@ video {
 .bg-slate-50\/50 {
   background-color: rgb(248 250 252 / 0.5);
 }
-.bg-slate-50\/80 {
-  background-color: rgb(248 250 252 / 0.8);
-}
 .bg-slate-900 {
   --tw-bg-opacity: 1;
   background-color: rgb(15 23 42 / var(--tw-bg-opacity, 1));
@@ -973,10 +994,6 @@ video {
 }
 .p-6 {
   padding: 1.5rem;
-}
-.px-1\.5 {
-  padding-right: 0.375rem;
-  padding-left: 0.375rem;
 }
 .px-2 {
   padding-right: 0.5rem;
@@ -1021,6 +1038,9 @@ video {
 .py-6 {
   padding-top: 1.5rem;
   padding-bottom: 1.5rem;
+}
+.pb-3 {
+  padding-bottom: 0.75rem;
 }
 .pb-4 {
   padding-bottom: 1rem;
@@ -1118,6 +1138,10 @@ video {
   --tw-text-opacity: 1;
   color: rgb(4 120 87 / var(--tw-text-opacity, 1));
 }
+.text-emerald-800 {
+  --tw-text-opacity: 1;
+  color: rgb(6 95 70 / var(--tw-text-opacity, 1));
+}
 .text-green-700 {
   --tw-text-opacity: 1;
   color: rgb(21 128 61 / var(--tw-text-opacity, 1));
@@ -1181,6 +1205,9 @@ video {
 .underline {
   text-decoration-line: underline;
 }
+.opacity-75 {
+  opacity: 0.75;
+}
 .shadow-sm {
   --tw-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --tw-shadow-colored: 0 1px 2px 0 var(--tw-shadow-color);
@@ -1197,21 +1224,21 @@ video {
 
 html,
 body {
-    margin: 0;
-    padding: 0;
+	margin: 0;
+	padding: 0;
 }
 
 #enterprise-forms-root {
-    min-height: 100vh;
-    font-family: "SF Pro Text", "Segoe UI", sans-serif;
+	min-height: 100vh;
+	font-family: "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 .ef-snackbar-list {
-    position: fixed;
-    bottom: 16px;
-    left: 16px;
-    right: auto;
-    z-index: 100000;
+	position: fixed;
+	bottom: 16px;
+	left: 16px;
+	right: auto;
+	z-index: 100000;
 }
 
 .ef-builder-canvas .block-editor-block-list__layout {
@@ -1223,6 +1250,67 @@ body {
 .ef-builder-canvas .block-editor-block-list__block.is-selected .ef-field-card {
 	border-color: #2563eb;
 	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.ef-entries fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.ef-entry-button {
+	border: 1px solid #cbd5e1;
+	border-radius: 6px;
+	background: #fff;
+	padding: 6px 10px;
+	color: #334155;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.ef-entry-button:hover:not(:disabled) {
+	background: #f1f5f9;
+}
+
+.ef-entries button:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+.ef-entries :focus-visible {
+	outline: 2px solid #2563eb;
+	outline-offset: 2px;
+}
+
+.ef-entry-review-grid {
+	display: grid;
+	gap: 20px;
+}
+
+.ef-entry-details {
+	min-width: 0;
+	grid-row: 1;
+}
+
+@media (min-width: 1280px) {
+
+	.ef-entry-review-grid {
+		grid-template-columns: minmax(0, 1fr) minmax(320px, 0.65fr);
+		align-items: start;
+	}
+
+	.ef-entry-details {
+		grid-column: 2;
+		position: sticky;
+		top: 16px;
+		max-height: calc(100vh - 32px);
+		overflow-y: auto;
+	}
+
+	.ef-entry-review-grid > .min-w-0 {
+		grid-column: 1;
+		grid-row: 1;
+	}
 }
 
 .placeholder\:text-slate-400::-moz-placeholder {
@@ -1258,6 +1346,11 @@ body {
 .hover\:bg-slate-100:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(241 245 249 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-slate-200:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(226 232 240 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-slate-700:hover {

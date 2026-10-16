@@ -2,7 +2,14 @@
 
 Enterprise Forms is a modern WordPress forms plugin built around a full-screen React admin workstation, a block-based form builder, and a frontend renderer powered by the WordPress Interactivity API.
 
-Current plugin version: 1.2.3.
+Current plugin version: 1.2.4.
+
+## What's New in 1.2.4
+
+- Inbox, Unread, Read, Spam, and Trash views with submission counts.
+- Page-level selection and bulk status changes, Trash, restore, and confirmed permanent deletion.
+- Responsive entry details with previous/next navigation and explicit read-status controls.
+- Consistent dashboard counts, filtered exports, and per-entry action feedback.
 
 ## What's New in 1.2.3
 
@@ -146,6 +153,26 @@ If you prefer Docker Compose directly, use `tools/drawio-renderer-compose.yml`.
 8. Embed the form with the `enterprise-forms/renderer` block.
 9. Accept submissions through the REST API.
 10. Review entries from the admin entries screen.
+
+### Reviewing and managing entries
+
+- **Inbox**, **Unread**, **Read**, **Spam**, and **Trash** views separate the review queue. Inbox and dashboard counts exclude Spam and Trash. View counts cover the whole form, before search/date filters.
+- Select individual entries or all entries **on the current page** (up to 100), then apply a bulk status change or move them to Trash. Moving spam back to Read or Unread returns it to Inbox.
+- Open **View details** to review a submission in the details panel, with previous/next navigation within the page. Opening details does not automatically mark it read; mark it read explicitly when review is complete. Submitted field values remain read-only.
+- Trash preserves the submission until it is restored or permanently deleted. **Restore to Inbox** returns it as Unread, not its former status. Existing retention policies still apply to stored entries.
+- Permanent deletion is only available in Trash and requires confirmation. It removes the entry and search index, but not associated payment records or uploaded files. Audit history remains.
+- Search, date filters, and CSV download apply to the current view. CSV column customization is collapsed until needed. Refresh reloads the current view; Clear filters resets search and dates.
+- Bulk actions report successes and individual failures, and selection clears on page/filter changes or refresh. Entry management requires the plugin's form-editing capability; exports require its export capability.
+
+Entry-management regression checks against a local WordPress installation:
+
+```bash
+php tests/entries/entry-management-smoke.php
+# For the local Docker service:
+docker exec wordpress php /var/www/html/wp-content/plugins/enterprise-forms/tests/entries/entry-management-smoke.php
+```
+
+The checks create their own draft forms and encrypted fixture entries and remove them in a `finally` block. They do not alter existing submissions or persist capability changes.
 
 ## File Storage
 
@@ -317,6 +344,9 @@ Key routes include:
 
 - `POST /entries/{form_id}` for frontend submissions
 - `GET /entries/{form_id}` for authenticated entry viewing
+- `POST /entries/{entry_id}/status` for single-entry status changes
+- `POST /entries/{form_id}/bulk` for up to 100 selected IDs: `read`, `unread`, `spam`, `trash`, `restore`, or `delete` (the latter requires `confirm_delete: true` and entries already in Trash). Responses contain `updated` IDs and per-entry `errors`.
+- `GET /entries/{form_id}/export` for filtered CSV export
 - `GET /stats` for dashboard metrics
 - `GET /forms/entry-counts` for per-form counts
 - `GET /notifications/statuses` for notification configuration state

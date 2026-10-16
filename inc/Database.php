@@ -48,7 +48,7 @@ class Database {
 
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table_name} WHERE form_id = %d AND status <> 'spam' ORDER BY created_at DESC LIMIT %d OFFSET %d",
+				"SELECT * FROM {$table_name} WHERE form_id = %d AND status NOT IN ('spam', 'trash') ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
 				$form_id,
 				$limit,
 				$offset
@@ -68,13 +68,13 @@ class Database {
 		if ( $form_id > 0 ) {
 			return (int) $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$table_name} WHERE form_id = %d AND status <> 'spam'",
+					"SELECT COUNT(*) FROM {$table_name} WHERE form_id = %d AND status NOT IN ('spam', 'trash')",
 					$form_id
 				)
 			);
 		}
 
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name} WHERE status <> 'spam'" );
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name} WHERE status NOT IN ('spam', 'trash')" );
 	}
 
 	/**
@@ -95,7 +95,7 @@ class Database {
 		$placeholders = implode( ',', array_fill( 0, count( $form_ids ), '%d' ) );
 		$raw_results  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT form_id, COUNT(*) AS entry_count FROM {$table_name} WHERE status <> 'spam' AND form_id IN ({$placeholders}) GROUP BY form_id",
+				"SELECT form_id, COUNT(*) AS entry_count FROM {$table_name} WHERE status NOT IN ('spam', 'trash') AND form_id IN ({$placeholders}) GROUP BY form_id",
 				$form_ids
 			),
 			ARRAY_A
